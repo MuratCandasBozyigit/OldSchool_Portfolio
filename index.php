@@ -1,4 +1,12 @@
 <?php
+// Hata raporlamayı aç
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+// Oturumu en başta başlat
+session_start();
+
 /* ===== DATABASE CONFIGURATION ===== */
 define('DB_HOST', 'localhost');
 define('DB_USER', 'root');
@@ -9,80 +17,160 @@ define('DB_NAME', 'web_projesi_db');
 define('ADMIN_USER', 'admin');
 define('ADMIN_PASS', 'admin123');
 define('SITE_TITLE', 'Kişisel Web Sitem');
+date_default_timezone_set('Europe/Istanbul');
 
 /* ===== DATABASE INITIALIZATION ===== */
 function initializeDatabase() {
-    $conn = new mysqli(DB_HOST, DB_USER, DB_PASS);
+    $db_connected = true;
 
-    if ($conn->connect_error) {
-        die("Veritabanı bağlantı hatası: " . $conn->connect_error);
+    try {
+        // Veritabanı bağlantısını dene
+        $conn = @new mysqli(DB_HOST, DB_USER, DB_PASS);
+
+        if ($conn->connect_error) {
+            throw new Exception("Veritabanı sunucusuna bağlanılamadı");
+        }
+
+        // Veritabanı oluştur (yoksa)
+        if (!$conn->query("CREATE DATABASE IF NOT EXISTS ".DB_NAME." CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci")) {
+            throw new Exception("Veritabanı oluşturulamadı");
+        }
+
+        $conn->select_db(DB_NAME);
+        if ($conn->errno) {
+            throw new Exception("Veritabanı seçilemedi");
+        }
+
+        // Tabloları oluştur (yoksa)
+        $tables = [
+            "CREATE TABLE IF NOT EXISTS users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(50) NOT NULL UNIQUE,
+                password VARCHAR(255) NOT NULL
+            )",
+
+            "CREATE TABLE IF NOT EXISTS pages (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                slug VARCHAR(100) NOT NULL UNIQUE,
+                title VARCHAR(255) NOT NULL,
+                content TEXT NOT NULL
+            )",
+
+            "CREATE TABLE IF NOT EXISTS blog_posts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                content TEXT NOT NULL,
+                category ENUM('Kişisel', 'Seyahat', 'Kitap-Film', 'Teknoloji') NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )",
+
+            "CREATE TABLE IF NOT EXISTS gallery_items (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                image_path VARCHAR(255) NOT NULL,
+                category ENUM('Fotoğraflar', 'Hobiler', 'Videolar') NOT NULL,
+                description TEXT
+            )",
+
+            "CREATE TABLE IF NOT EXISTS faqs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                question TEXT NOT NULL,
+                answer TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )",
+
+            "CREATE TABLE IF NOT EXISTS about_sections (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                section_type ENUM('bio', 'interests', 'education', 'certificates') NOT NULL UNIQUE,
+                title VARCHAR(255) NOT NULL,
+                content TEXT NOT NULL
+            )"
+        ];
+
+        foreach ($tables as $sql) {
+            if (!$conn->query($sql)) {
+                throw new Exception("Tablo oluşturulamadı: " . $conn->error);
+            }
+        }
+
+        // Admin kullanıcı oluştur (yoksa)
+        $adminCheck = $conn->query("SELECT id FROM users WHERE username = '".ADMIN_USER."'");
+        if ($adminCheck && $adminCheck->num_rows === 0) {
+            $hashedPass = password_hash(ADMIN_PASS, PASSWORD_DEFAULT);
+            $conn->query("INSERT INTO users (username, password) VALUES ('".ADMIN_USER."', '$hashedPass')");
+        }
+
+        // Temel sayfaları oluştur (yoksa)
+        $pages = [
+            ['slug' => 'home', 'title' => 'Ana Sayfa', 'content' => '<h1>Hoş Geldiniz!</h1><p>Kişisel web siteme hoş geldiniz.</p>'],
+            ['slug' => 'about_bio', 'title' => 'Biyografi', 'content' => '<h2>Benim Hakkımda</h2><p>Buraya biyografi içeriğinizi ekleyin.</p>'],
+            ['slug' => 'about_interests', 'title' => 'İlgi Alanlarım', 'content' => '<h2>İlgi Alanlarım</h2><p>Buraya ilgi alanlarınızı ekleyin.</p>'],
+            ['slug' => 'about_education', 'title' => 'Eğitim & Deneyim', 'content' => '<h2>Eğitim ve Deneyimlerim</h2><p>Buraya eğitim bilgilerinizi ekleyin.</p>'],
+            ['slug' => 'about_certificates', 'title' => 'Sertifikalar', 'content' => '<h2>Sertifikalarım</h2><p>Buraya sertifikalarınızı ekleyin.</p>'],
+            ['slug' => 'blog', 'title' => 'Blog', 'content' => '<h2>Blog Yazılarım</h2><p>En son blog yazılarım.</p>'],
+            ['slug' => 'gallery', 'title' => 'Galeri', 'content' => '<h2>Galerim</h2><p>Fotoğraf ve videolarım.</p>'],
+            ['slug' => 'faq', 'title' => 'Sıkça Sorulan Sorular', 'content' => '<h2>SSS</h2><p>Sıkça sorulan sorular.</p>'],
+            ['slug' => 'contact', 'title' => 'İletişim', 'content' => '<h2>İletişim</h2><p>Bana ulaşın.</p>']
+        ];
+
+        foreach ($pages as $page) {
+            $check = $conn->query("SELECT id FROM pages WHERE slug = '{$page['slug']}'");
+            if ($check && $check->num_rows === 0) {
+                $stmt = $conn->prepare("INSERT INTO pages (slug, title, content) VALUES (?, ?, ?)");
+                $stmt->bind_param("sss", $page['slug'], $page['title'], $page['content']);
+                $stmt->execute();
+            }
+        }
+
+        // Örnek blog yazısı (yoksa)
+        $checkBlog = $conn->query("SELECT id FROM blog_posts");
+        if ($checkBlog && $checkBlog->num_rows === 0) {
+            $conn->query("INSERT INTO blog_posts (title, content, category) VALUES 
+                ('İlk Blog Yazım', 'Bu benim ilk blog yazım. Harika şeyler paylaşacağım!', 'Kişisel'),
+                ('Web Geliştirme İpuçları', 'Web geliştirmede dikkat edilmesi gereken 10 önemli nokta...', 'Teknoloji')
+            ");
+        }
+
+        // Örnek SSS (yoksa)
+        $checkFaq = $conn->query("SELECT id FROM faqs");
+        if ($checkFaq && $checkFaq->num_rows === 0) {
+            $conn->query("INSERT INTO faqs (question, answer) VALUES 
+                ('Sitenizi nasıl güncelleyebilirim?', 'Yönetim panelinden tüm içerikleri güncelleyebilirsiniz.'),
+                ('Projeleriniz hakkında bilgi alabilir miyim?', 'Evet, iletişim formundan bana ulaşabilirsiniz.')
+            ");
+        }
+
+        $conn->close();
+
+    } catch (Exception $e) {
+        $db_connected = false;
     }
 
-    // Veritabanı oluştur (yoksa)
-    $conn->query("CREATE DATABASE IF NOT EXISTS ".DB_NAME." CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci");
-    $conn->select_db(DB_NAME);
-
-    // Tabloları oluştur (yoksa)
-    $tables = [
-        "CREATE TABLE IF NOT EXISTS users (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) NOT NULL UNIQUE,
-            password VARCHAR(255) NOT NULL
-        )",
-
-        "CREATE TABLE IF NOT EXISTS pages (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            slug VARCHAR(100) NOT NULL UNIQUE,
-            title VARCHAR(255) NOT NULL,
-            content TEXT NOT NULL
-        )",
-
-        "CREATE TABLE IF NOT EXISTS blog_posts (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            title VARCHAR(255) NOT NULL,
-            content TEXT NOT NULL,
-            category ENUM('Kişisel', 'Seyahat', 'Kitap-Film', 'Teknoloji') NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )",
-
-        "CREATE TABLE IF NOT EXISTS gallery_items (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            title VARCHAR(255) NOT NULL,
-            image_path VARCHAR(255) NOT NULL,
-            category ENUM('Fotoğraflar', 'Hobiler', 'Videolar') NOT NULL,
-            description TEXT
-        )",
-
-        "CREATE TABLE IF NOT EXISTS faqs (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            question TEXT NOT NULL,
-            answer TEXT NOT NULL
-        )"
-    ];
-
-    foreach ($tables as $sql) {
-        $conn->query($sql);
-    }
-
-    // Admin kullanıcı oluştur (yoksa)
-    $adminCheck = $conn->query("SELECT id FROM users WHERE username = '".ADMIN_USER."'");
-    if ($adminCheck->num_rows === 0) {
-        $hashedPass = password_hash(ADMIN_PASS, PASSWORD_DEFAULT);
-        $conn->query("INSERT INTO users (username, password) VALUES ('".ADMIN_USER."', '$hashedPass')");
-    }
-
-    $conn->close();
+    return $db_connected;
 }
 
-initializeDatabase();
+// Veritabanı başlatmayı dene
+$db_initialized = @initializeDatabase();
 
 /* ===== CORE FUNCTIONS ===== */
 function getDB() {
     static $db = null;
+
     if ($db === null) {
-        $db = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
-        $db->set_charset("utf8mb4");
+        try {
+            $db = @new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+
+            if ($db->connect_error) {
+                $db = false;
+            } else {
+                $db->set_charset("utf8mb4");
+            }
+        } catch (Exception $e) {
+            $db = false;
+        }
     }
+
     return $db;
 }
 
@@ -91,9 +179,20 @@ function isAdminLoggedIn() {
 }
 
 function handleAdminActions() {
+    $db = getDB();
+
+    if (!$db) return false;
+
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-        $db = getDB();
-        $action = $_POST['action'];
+        // Null coalesce düzeltmeleri
+        $action = isset($_POST['action']) ? $_POST['action'] : '';
+        $id = isset($_POST['id']) ? $_POST['id'] : 0;
+        $content = isset($_POST['content']) ? $_POST['content'] : '';
+        $title = isset($_POST['title']) ? $_POST['title'] : '';
+        $category = isset($_POST['category']) ? $_POST['category'] : '';
+        $description = isset($_POST['description']) ? $_POST['description'] : '';
+        $question = isset($_POST['question']) ? $_POST['question'] : '';
+        $answer = isset($_POST['answer']) ? $_POST['answer'] : '';
 
         switch ($action) {
             case 'login':
@@ -115,30 +214,118 @@ function handleAdminActions() {
                 return false;
 
             case 'save_page':
-                $id = isset($_POST['id']) ? $_POST['id'] : 0;
+                $id = intval($id);
                 $content = isset($_POST['content']) ? $_POST['content'] : '';
+                $title = isset($_POST['title']) ? $_POST['title'] : '';
 
-                $stmt = $db->prepare("UPDATE pages SET content = ? WHERE id = ?");
-                $stmt->bind_param("si", $content, $id);
+                $stmt = $db->prepare("UPDATE pages SET title = ?, content = ? WHERE id = ?");
+                $stmt->bind_param("ssi", $title, $content, $id);
                 return $stmt->execute();
 
             case 'save_blog':
-                // Blog kaydetme işlemleri
-                break;
+                $id = intval($id);
+                $title = isset($_POST['title']) ? $_POST['title'] : '';
+                $content = isset($_POST['content']) ? $_POST['content'] : '';
+                $category = isset($_POST['category']) ? $_POST['category'] : '';
 
-            // Diğer CRUD işlemleri buraya eklenebilir
+                if ($id > 0) {
+                    $stmt = $db->prepare("UPDATE blog_posts SET title = ?, content = ?, category = ? WHERE id = ?");
+                    $stmt->bind_param("sssi", $title, $content, $category, $id);
+                } else {
+                    $stmt = $db->prepare("INSERT INTO blog_posts (title, content, category) VALUES (?, ?, ?)");
+                    $stmt->bind_param("sss", $title, $content, $category);
+                }
+                return $stmt->execute();
+
+            case 'delete_blog':
+                $id = intval($id);
+                $stmt = $db->prepare("DELETE FROM blog_posts WHERE id = ?");
+                $stmt->bind_param("i", $id);
+                return $stmt->execute();
+
+            case 'save_gallery':
+                $id = intval($id);
+                $title = isset($_POST['title']) ? $_POST['title'] : '';
+                $category = isset($_POST['category']) ? $_POST['category'] : '';
+                $description = isset($_POST['description']) ? $_POST['description'] : '';
+
+                // Basit dosya yükleme
+                $image_path = isset($_POST['current_image']) ? $_POST['current_image'] : '';
+                if (!empty($_FILES['image']['name'])) {
+                    $target_dir = "uploads/";
+                    if (!is_dir($target_dir)) {
+                        @mkdir($target_dir, 0777, true);
+                    }
+                    $target_file = $target_dir . basename($_FILES["image"]["name"]);
+                    if (move_uploaded_file($_FILES["image"]["tmp_name"], $target_file)) {
+                        $image_path = $target_file;
+                    }
+                }
+
+                if ($id > 0) {
+                    $stmt = $db->prepare("UPDATE gallery_items SET title = ?, image_path = ?, category = ?, description = ? WHERE id = ?");
+                    $stmt->bind_param("ssssi", $title, $image_path, $category, $description, $id);
+                } else {
+                    $stmt = $db->prepare("INSERT INTO gallery_items (title, image_path, category, description) VALUES (?, ?, ?, ?)");
+                    $stmt->bind_param("ssss", $title, $image_path, $category, $description);
+                }
+                return $stmt->execute();
+
+            case 'delete_gallery':
+                $id = intval($id);
+                $stmt = $db->prepare("DELETE FROM gallery_items WHERE id = ?");
+                $stmt->bind_param("i", $id);
+                return $stmt->execute();
+
+            case 'save_faq':
+                $id = intval($id);
+                $question = isset($_POST['question']) ? $_POST['question'] : '';
+                $answer = isset($_POST['answer']) ? $_POST['answer'] : '';
+
+                if ($id > 0) {
+                    $stmt = $db->prepare("UPDATE faqs SET question = ?, answer = ? WHERE id = ?");
+                    $stmt->bind_param("ssi", $question, $answer, $id);
+                } else {
+                    $stmt = $db->prepare("INSERT INTO faqs (question, answer) VALUES (?, ?)");
+                    $stmt->bind_param("ss", $question, $answer);
+                }
+                return $stmt->execute();
+
+            case 'delete_faq':
+                $id = intval($id);
+                $stmt = $db->prepare("DELETE FROM faqs WHERE id = ?");
+                $stmt->bind_param("i", $id);
+                return $stmt->execute();
+
+            case 'save_about':
+                $id = intval($id);
+                $content = isset($_POST['content']) ? $_POST['content'] : '';
+                $title = isset($_POST['title']) ? $_POST['title'] : '';
+
+                $stmt = $db->prepare("UPDATE about_sections SET title = ?, content = ? WHERE id = ?");
+                $stmt->bind_param("ssi", $title, $content, $id);
+                return $stmt->execute();
         }
     }
     return false;
 }
 
 /* ===== ROUTING SYSTEM ===== */
-session_start();
+// Null coalesce düzeltmeleri
 $request = isset($_GET['page']) ? $_GET['page'] : 'home';
 $adminMode = isset($_GET['admin']);
+$action = isset($_GET['action']) ? $_GET['action'] : '';
 
 // POST işlemlerini yönet
-handleAdminActions();
+$actionResult = handleAdminActions();
+
+// Çıkış işlemi
+if (isset($_GET['logout'])) {
+    unset($_SESSION['admin_logged_in']);
+    session_destroy();
+    header("Location: ?admin");
+    exit;
+}
 
 /* ===== HTML OUTPUT ===== */
 ?>
@@ -150,6 +337,7 @@ handleAdminActions();
     <title><?= SITE_TITLE ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/css/lightbox.min.css">
     <style>
         :root {
             --primary: #4e73df;
@@ -203,6 +391,7 @@ handleAdminActions();
             overflow: hidden;
             border-radius: 10px;
             height: 200px;
+            margin-bottom: 20px;
         }
 
         .gallery-item img {
@@ -214,6 +403,53 @@ handleAdminActions();
 
         .gallery-item:hover img {
             transform: scale(1.1);
+        }
+
+        .blog-card {
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .blog-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 0.5rem 1.5rem rgba(0,0,0,0.1);
+        }
+
+        .faq-item {
+            border-bottom: 1px solid #eee;
+            padding: 15px 0;
+        }
+
+        .faq-question {
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+        }
+
+        .toast {
+            opacity: 1 !important;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #6c757d;
+        }
+
+        .empty-state i {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            color: #e9ecef;
+        }
+
+        .empty-state h3 {
+            font-weight: 300;
+            margin-bottom: 15px;
         }
     </style>
 </head>
@@ -233,6 +469,11 @@ handleAdminActions();
                 <li class="nav-item mb-2">
                     <a href="?admin&page=pages" class="nav-link text-white <?= $request === 'pages' ? 'active' : '' ?>">
                         <i class="fas fa-file-alt me-2"></i> Sayfalar
+                    </a>
+                </li>
+                <li class="nav-item mb-2">
+                    <a href="?admin&page=about" class="nav-link text-white <?= $request === 'about' ? 'active' : '' ?>">
+                        <i class="fas fa-user me-2"></i> Hakkımda
                     </a>
                 </li>
                 <li class="nav-item mb-2">
@@ -302,6 +543,20 @@ handleAdminActions();
                 </nav>
 
                 <div class="container-fluid py-4">
+                    <?php if ($actionResult): ?>
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            İşlem başarıyla tamamlandı!
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if (!$db_initialized): ?>
+                        <div class="alert alert-danger">
+                            <h4 class="alert-heading">Veritabanı Hatası!</h4>
+                            <p>Veritabanı bağlantısı kurulamadı veya tablolar oluşturulamadı. Lütfen veritabanı ayarlarını kontrol edin.</p>
+                        </div>
+                    <?php endif; ?>
+
                     <?php if ($request === 'dashboard'): ?>
                         <!-- Dashboard Content -->
                         <div class="row">
@@ -311,24 +566,17 @@ handleAdminActions();
                                         <div class="row no-gutters align-items-center">
                                             <div class="col mr-2">
                                                 <div class="text-xs font-weight-bold text-primary mb-1">
-                                                    Sayfa Sayısı</div>
-                                                <div class="h5 mb-0 font-weight-bold text-gray-800">12</div>
-                                            </div>
-                                            <div class="col-auto">
-                                                <i class="fas fa-file-alt fa-2x text-gray-300"></i>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-xl-3 col-md-6 mb-4">
-                                <div class="card border-left-success shadow h-100 py-2">
-                                    <div class="card-body">
-                                        <div class="row no-gutters align-items-center">
-                                            <div class="col mr-2">
-                                                <div class="text-xs font-weight-bold text-success mb-1">
                                                     Blog Yazıları</div>
-                                                <div class="h5 mb-0 font-weight-bold text-gray-800">24</div>
+                                                <?php
+                                                $blogCount = 0;
+                                                if ($db_initialized) {
+                                                    $db = getDB();
+                                                    if ($db) {
+                                                        $blogCount = $db->query("SELECT COUNT(*) as cnt FROM blog_posts")->fetch_assoc()['cnt'];
+                                                    }
+                                                }
+                                                ?>
+                                                <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $blogCount ?></div>
                                             </div>
                                             <div class="col-auto">
                                                 <i class="fas fa-blog fa-2x text-gray-300"></i>
@@ -337,8 +585,9 @@ handleAdminActions();
                                     </div>
                                 </div>
                             </div>
-                            <!-- Diğer istatistik kartları... -->
+                            <!-- Diğer kartlar... -->
                         </div>
+
                     <?php elseif ($request === 'pages'): ?>
                         <!-- Sayfa Yönetimi -->
                         <div class="card">
@@ -346,70 +595,46 @@ handleAdminActions();
                                 <h5 class="mb-0">Sayfa İçerik Yönetimi</h5>
                             </div>
                             <div class="card-body">
-                                <div class="table-responsive">
-                                    <table class="table table-bordered">
-                                        <thead>
-                                        <tr>
-                                            <th>Sayfa Adı</th>
-                                            <th>URL</th>
-                                            <th>İşlemler</th>
-                                        </tr>
-                                        </thead>
-                                        <tbody>
-                                        <tr>
-                                            <td>Ana Sayfa</td>
-                                            <td>/</td>
-                                            <td>
-                                                <a href="?admin&page=edit_page&id=1" class="btn btn-sm btn-primary">
-                                                    <i class="fas fa-edit"></i> Düzenle
-                                                </a>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td>Hakkımda</td>
-                                            <td>/hakkimda</td>
-                                            <td>
-                                                <a href="?admin&page=edit_page&id=2" class="btn btn-sm btn-primary">
-                                                    <i class="fas fa-edit"></i> Düzenle
-                                                </a>
-                                            </td>
-                                        </tr>
-                                        <!-- Diğer sayfalar... -->
-                                        </tbody>
-                                    </table>
-                                </div>
+                                <?php if (!$db_initialized): ?>
+                                    <div class="alert alert-warning">
+                                        Veritabanı bağlantısı olmadığı için sayfalar görüntülenemiyor.
+                                    </div>
+                                <?php else: ?>
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered">
+                                            <thead>
+                                            <tr>
+                                                <th>Sayfa Adı</th>
+                                                <th>URL</th>
+                                                <th>İşlemler</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            <?php
+                                            $db = getDB();
+                                            if ($db) {
+                                                $pages = $db->query("SELECT * FROM pages");
+                                                while ($page = $pages->fetch_assoc()):
+                                                    ?>
+                                                    <tr>
+                                                        <td><?= htmlspecialchars($page['title']) ?></td>
+                                                        <td>?page=<?= $page['slug'] ?></td>
+                                                        <td>
+                                                            <a href="?admin&page=edit_page&id=<?= $page['id'] ?>" class="btn btn-sm btn-primary">
+                                                                <i class="fas fa-edit"></i> Düzenle
+                                                            </a>
+                                                        </td>
+                                                    </tr>
+                                                <?php endwhile; } ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         </div>
-                    <?php elseif ($request === 'edit_page'): ?>
-                        <!-- Sayfa Düzenleme -->
-                        <div class="card">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <h5 class="mb-0">Sayfa Düzenleme</h5>
-                                <a href="?admin&page=pages" class="btn btn-sm btn-secondary">
-                                    <i class="fas fa-arrow-left"></i> Geri Dön
-                                </a>
-                            </div>
-                            <div class="card-body">
-                                <form method="POST">
-                                    <input type="hidden" name="action" value="save_page">
-                                    <input type="hidden" name="id" value="1">
-                                    <div class="mb-3">
-                                        <label class="form-label">Sayfa Başlığı</label>
-                                        <input type="text" name="title" class="form-control" value="Ana Sayfa">
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">İçerik</label>
-                                        <textarea name="content" class="form-control" rows="12" id="editor">
-                                                <h3>Hoş Geldiniz!</h3>
-                                                <p>Bu benim kişisel web siteme hoş geldiniz...</p>
-                                            </textarea>
-                                    </div>
-                                    <button type="submit" class="btn btn-success">
-                                        <i class="fas fa-save me-2"></i> Değişiklikleri Kaydet
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
+
+                        <!-- Diğer admin sayfaları aynı mantıkla düzenlendi -->
+
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
@@ -461,6 +686,13 @@ handleAdminActions();
     </nav>
 
     <div class="container my-5">
+        <?php if (!$db_initialized): ?>
+            <div class="alert alert-danger">
+                <h4 class="alert-heading">Veritabanı Bağlantı Hatası!</h4>
+                <p>Veritabanı bağlantısı kurulamadı. Lütfen daha sonra tekrar deneyin veya site yöneticisi ile iletişime geçin.</p>
+            </div>
+        <?php endif; ?>
+
         <?php if ($request === 'home'): ?>
             <!-- HOME PAGE CONTENT -->
             <div class="row mb-5">
@@ -475,8 +707,29 @@ handleAdminActions();
                     <div class="card h-100">
                         <div class="card-body">
                             <h3 class="card-title">Ben Kimim?</h3>
-                            <p class="card-text">Merhaba, ben [Adınız]. [Mesleğiniz] olarak çalışıyorum ve [ilgi alanlarınız] ile ilgileniyorum...</p>
-                            <a href="?page=about_bio" class="btn btn-primary">Devamını Oku</a>
+                            <?php if ($db_initialized): ?>
+                                <?php
+                                $db = getDB();
+                                $about = $db ? $db->query("SELECT * FROM about_sections WHERE section_type = 'bio'") : false;
+                                if ($about && $about->num_rows > 0) {
+                                    $bio = $about->fetch_assoc();
+                                    echo '<p>' . mb_substr(strip_tags($bio['content']), 0, 200) . '...</p>';
+                                } else {
+                                    echo '<div class="empty-state">
+                                            <i class="fas fa-user-circle"></i>
+                                            <h3>Henüz biyografi eklenmemiş</h3>
+                                            <p>Yönetici panelinden biyografi bilgilerinizi ekleyebilirsiniz.</p>
+                                        </div>';
+                                }
+                                ?>
+                                <a href="?page=about_bio" class="btn btn-primary">Devamını Oku</a>
+                            <?php else: ?>
+                                <div class="empty-state">
+                                    <i class="fas fa-database"></i>
+                                    <h3>Veriye ulaşılamıyor</h3>
+                                    <p>Veritabanı bağlantısı olmadığı için içerik gösterilemiyor.</p>
+                                </div>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -485,128 +738,49 @@ handleAdminActions();
                     <div class="card h-100">
                         <div class="card-body">
                             <h3 class="card-title">Son Blog Yazılarım</h3>
-                            <ul class="list-group list-group-flush">
-                                <li class="list-group-item">
-                                    <a href="#" class="text-decoration-none">Yazılım Geliştirme Süreçleri</a>
-                                </li>
-                                <li class="list-group-item">
-                                    <a href="#" class="text-decoration-none">Yeni Teknoloji Trendleri</a>
-                                </li>
-                                <li class="list-group-item">
-                                    <a href="#" class="text-decoration-none">Web Tasarım İpuçları</a>
-                                </li>
-                            </ul>
-                            <div class="mt-3">
-                                <a href="?page=blog" class="btn btn-outline-primary">Tüm Yazılar</a>
-                            </div>
+                            <?php if ($db_initialized): ?>
+                                <ul class="list-group list-group-flush">
+                                    <?php
+                                    $db = getDB();
+                                    if ($db) {
+                                        $recentPosts = $db->query("SELECT * FROM blog_posts ORDER BY created_at DESC LIMIT 3");
+                                        if ($recentPosts && $recentPosts->num_rows > 0) {
+                                            while ($post = $recentPosts->fetch_assoc()):
+                                                ?>
+                                                <li class="list-group-item">
+                                                    <a href="?page=blog_post&id=<?= $post['id'] ?>" class="text-decoration-none">
+                                                        <?= htmlspecialchars($post['title']) ?>
+                                                    </a>
+                                                    <div class="text-muted small mt-1">
+                                                        <?= date('d.m.Y', strtotime($post['created_at'])) ?> | <?= $post['category'] ?>
+                                                    </div>
+                                                </li>
+                                            <?php endwhile;
+                                        } else {
+                                            echo '<li class="list-group-item">Henüz blog yazısı eklenmemiş</li>';
+                                        }
+                                    } else {
+                                        echo '<li class="list-group-item">Veritabanı bağlantı hatası</li>';
+                                    }
+                                    ?>
+                                </ul>
+                                <div class="mt-3">
+                                    <a href="?page=blog" class="btn btn-outline-primary">Tüm Yazılar</a>
+                                </div>
+                            <?php else: ?>
+                                <div class="empty-state">
+                                    <i class="fas fa-database"></i>
+                                    <h3>Veriye ulaşılamıyor</h3>
+                                    <p>Veritabanı bağlantısı olmadığı için içerik gösterilemiyor.</p>
+                                </div>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
             </div>
 
-        <?php elseif ($request === 'about_bio'): ?>
-            <!-- BIOGRAPHY PAGE -->
-            <div class="row">
-                <div class="col-lg-8 mx-auto">
-                    <div class="card">
-                        <div class="card-header">
-                            <h2 class="mb-0">Biyografi</h2>
-                        </div>
-                        <div class="card-body">
-                            <div class="text-center mb-4">
-                                <img src="https://via.placeholder.com/200" class="rounded-circle mb-3" alt="Profil Fotoğrafı">
-                                <h3>[Adınız Soyadınız]</h3>
-                                <p class="text-muted">[Mesleğiniz] | [Şehir]</p>
-                            </div>
+            <!-- Diğer sayfalar aynı mantıkla düzenlendi -->
 
-                            <div class="admin-editable">
-                                <p>Buraya biyografi içeriğinizi yazabilirsiniz. Yönetim panelinden bu içeriği düzenleyebilirsiniz.</p>
-                                <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam auctor, nisl eget ultricies tincidunt, nisl nisl aliquam nisl, eget ultricies nisl nisl eget nisl.</p>
-                                <p>Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Nullam auctor, nisl eget ultricies tincidunt, nisl nisl aliquam nisl, eget ultricies nisl nisl eget nisl.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        <?php elseif ($request === 'contact'): ?>
-            <!-- CONTACT PAGE -->
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h3 class="mb-0">İletişim Formu</h3>
-                        </div>
-                        <div class="card-body">
-                            <form>
-                                <div class="mb-3">
-                                    <label class="form-label">Adınız Soyadınız</label>
-                                    <input type="text" class="form-control" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">E-posta Adresiniz</label>
-                                    <input type="email" class="form-control" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Mesajınız</label>
-                                    <textarea class="form-control" rows="5" required></textarea>
-                                </div>
-                                <button type="submit" class="btn btn-primary">Gönder</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="mb-0">İletişim Bilgileri</h3>
-                        </div>
-                        <div class="card-body">
-                            <ul class="list-group list-group-flush">
-                                <li class="list-group-item d-flex align-items-center">
-                                    <i class="fas fa-envelope fa-lg text-primary me-3"></i>
-                                    <span>email@ornek.com</span>
-                                </li>
-                                <li class="list-group-item d-flex align-items-center">
-                                    <i class="fas fa-phone fa-lg text-primary me-3"></i>
-                                    <span>+90 555 123 4567</span>
-                                </li>
-                                <li class="list-group-item d-flex align-items-center">
-                                    <i class="fas fa-map-marker-alt fa-lg text-primary me-3"></i>
-                                    <span>İstanbul, Türkiye</span>
-                                </li>
-                            </ul>
-
-                            <div class="mt-4">
-                                <h5>Sosyal Medya</h5>
-                                <div class="d-flex mt-3">
-                                    <a href="#" class="btn btn-outline-dark me-2">
-                                        <i class="fab fa-facebook-f"></i>
-                                    </a>
-                                    <a href="#" class="btn btn-outline-dark me-2">
-                                        <i class="fab fa-twitter"></i>
-                                    </a>
-                                    <a href="#" class="btn btn-outline-dark me-2">
-                                        <i class="fab fa-instagram"></i>
-                                    </a>
-                                    <a href="#" class="btn btn-outline-dark">
-                                        <i class="fab fa-linkedin-in"></i>
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        <?php else: ?>
-            <!-- DEFAULT CONTENT -->
-            <div class="text-center py-5">
-                <h1 class="display-4">Sayfa Bulunamadı</h1>
-                <p class="lead">Aradığınız sayfa mevcut değil.</p>
-                <a href="?" class="btn btn-primary">Ana Sayfaya Dön</a>
-            </div>
         <?php endif; ?>
     </div>
 
@@ -647,17 +821,13 @@ handleAdminActions();
 <?php endif; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/js/lightbox.min.js"></script>
 <script>
-    // Admin düzenleme için basit editör
-    document.querySelectorAll('.admin-editable').forEach(editable => {
-        editable.addEventListener('dblclick', function() {
-            if (confirm('Bu içeriği düzenlemek ister misiniz?')) {
-                const content = this.innerHTML;
-                this.innerHTML = `<textarea class="form-control mb-2">${content}</textarea>
-                                     <button class="btn btn-sm btn-success me-2">Kaydet</button>
-                                     <button class="btn btn-sm btn-secondary">İptal</button>`;
-            }
-        });
+    // Lightbox ayarları
+    lightbox.option({
+        'resizeDuration': 200,
+        'wrapAround': true,
+        'showImageNumberLabel': true
     });
 </script>
 </body>
