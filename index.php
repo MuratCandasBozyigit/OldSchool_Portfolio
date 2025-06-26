@@ -123,22 +123,21 @@ function initializeDatabase() {
             }
         }
 
-        // Örnek blog yazısı (yoksa)
-        $checkBlog = $conn->query("SELECT id FROM blog_posts");
-        if ($checkBlog && $checkBlog->num_rows === 0) {
-            $conn->query("INSERT INTO blog_posts (title, content, category) VALUES 
-                ('İlk Blog Yazım', 'Bu benim ilk blog yazım. Harika şeyler paylaşacağım!', 'Kişisel'),
-                ('Web Geliştirme İpuçları', 'Web geliştirmede dikkat edilmesi gereken 10 önemli nokta...', 'Teknoloji')
-            ");
-        }
+        // Hakkımda bölümlerini oluştur (yoksa)
+        $aboutSections = [
+            ['section_type' => 'bio', 'title' => 'Biyografi', 'content' => '<p>Buraya biyografi içeriğinizi ekleyin.</p>'],
+            ['section_type' => 'interests', 'title' => 'İlgi Alanlarım', 'content' => '<p>Buraya ilgi alanlarınızı ekleyin.</p>'],
+            ['section_type' => 'education', 'title' => 'Eğitim & Deneyim', 'content' => '<p>Buraya eğitim bilgilerinizi ekleyin.</p>'],
+            ['section_type' => 'certificates', 'title' => 'Sertifikalar', 'content' => '<p>Buraya sertifikalarınızı ekleyin.</p>']
+        ];
 
-        // Örnek SSS (yoksa)
-        $checkFaq = $conn->query("SELECT id FROM faqs");
-        if ($checkFaq && $checkFaq->num_rows === 0) {
-            $conn->query("INSERT INTO faqs (question, answer) VALUES 
-                ('Sitenizi nasıl güncelleyebilirim?', 'Yönetim panelinden tüm içerikleri güncelleyebilirsiniz.'),
-                ('Projeleriniz hakkında bilgi alabilir miyim?', 'Evet, iletişim formundan bana ulaşabilirsiniz.')
-            ");
+        foreach ($aboutSections as $section) {
+            $check = $conn->query("SELECT id FROM about_sections WHERE section_type = '{$section['section_type']}'");
+            if ($check && $check->num_rows === 0) {
+                $stmt = $conn->prepare("INSERT INTO about_sections (section_type, title, content) VALUES (?, ?, ?)");
+                $stmt->bind_param("sss", $section['section_type'], $section['title'], $section['content']);
+                $stmt->execute();
+            }
         }
 
         $conn->close();
@@ -585,7 +584,56 @@ if (isset($_GET['logout'])) {
                                     </div>
                                 </div>
                             </div>
-                            <!-- Diğer kartlar... -->
+                            <div class="col-xl-3 col-md-6 mb-4">
+                                <div class="card border-left-success shadow h-100 py-2">
+                                    <div class="card-body">
+                                        <div class="row no-gutters align-items-center">
+                                            <div class="col mr-2">
+                                                <div class="text-xs font-weight-bold text-success mb-1">
+                                                    Galeri Öğeleri</div>
+                                                <?php
+                                                $galleryCount = 0;
+                                                if ($db_initialized) {
+                                                    $db = getDB();
+                                                    if ($db) {
+                                                        $galleryCount = $db->query("SELECT COUNT(*) as cnt FROM gallery_items")->fetch_assoc()['cnt'];
+                                                    }
+                                                }
+                                                ?>
+                                                <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $galleryCount ?></div>
+                                            </div>
+                                            <div class="col-auto">
+                                                <i class="fas fa-images fa-2x text-gray-300"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-xl-3 col-md-6 mb-4">
+                                <div class="card border-left-info shadow h-100 py-2">
+                                    <div class="card-body">
+                                        <div class="row no-gutters align-items-center">
+                                            <div class="col mr-2">
+                                                <div class="text-xs font-weight-bold text-info mb-1">
+                                                    SSS</div>
+                                                <?php
+                                                $faqCount = 0;
+                                                if ($db_initialized) {
+                                                    $db = getDB();
+                                                    if ($db) {
+                                                        $faqCount = $db->query("SELECT COUNT(*) as cnt FROM faqs")->fetch_assoc()['cnt'];
+                                                    }
+                                                }
+                                                ?>
+                                                <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $faqCount ?></div>
+                                            </div>
+                                            <div class="col-auto">
+                                                <i class="fas fa-question-circle fa-2x text-gray-300"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                     <?php elseif ($request === 'pages'): ?>
@@ -633,7 +681,440 @@ if (isset($_GET['logout'])) {
                             </div>
                         </div>
 
-                        <!-- Diğer admin sayfaları aynı mantıkla düzenlendi -->
+                    <?php elseif ($request === 'edit_page'): ?>
+                        <!-- Sayfa Düzenleme -->
+                        <?php
+                        $id = intval($_GET['id']);
+                        $pageContent = ['id' => 0, 'title' => '', 'content' => ''];
+
+                        if ($db_initialized) {
+                            $db = getDB();
+                            if ($db) {
+                                $stmt = $db->prepare("SELECT * FROM pages WHERE id = ?");
+                                $stmt->bind_param("i", $id);
+                                $stmt->execute();
+                                $result = $stmt->get_result();
+                                if ($result->num_rows > 0) {
+                                    $pageContent = $result->fetch_assoc();
+                                }
+                            }
+                        }
+                        ?>
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Sayfa Düzenleme: <?= $pageContent['title'] ?></h5>
+                                <a href="?admin&page=pages" class="btn btn-sm btn-secondary">
+                                    <i class="fas fa-arrow-left"></i> Geri Dön
+                                </a>
+                            </div>
+                            <div class="card-body">
+                                <form method="POST">
+                                    <input type="hidden" name="action" value="save_page">
+                                    <input type="hidden" name="id" value="<?= $pageContent['id'] ?>">
+                                    <div class="mb-3">
+                                        <label class="form-label">Sayfa Başlığı</label>
+                                        <input type="text" name="title" class="form-control" value="<?= htmlspecialchars($pageContent['title']) ?>" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">İçerik</label>
+                                        <textarea name="content" class="form-control" rows="12" required><?= htmlspecialchars($pageContent['content']) ?></textarea>
+                                    </div>
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="fas fa-save me-2"></i> Değişiklikleri Kaydet
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                    <?php elseif ($request === 'about'): ?>
+                        <!-- Hakkımda Yönetimi -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Hakkımda Sayfası Yönetimi</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="list-group">
+                                    <a href="?admin&page=edit_about&section=bio" class="list-group-item list-group-item-action">
+                                        <i class="fas fa-user me-2"></i> Biyografi
+                                    </a>
+                                    <a href="?admin&page=edit_about&section=interests" class="list-group-item list-group-item-action">
+                                        <i class="fas fa-heart me-2"></i> İlgi Alanlarım
+                                    </a>
+                                    <a href="?admin&page=edit_about&section=education" class="list-group-item list-group-item-action">
+                                        <i class="fas fa-graduation-cap me-2"></i> Eğitim & Deneyim
+                                    </a>
+                                    <a href="?admin&page=edit_about&section=certificates" class="list-group-item list-group-item-action">
+                                        <i class="fas fa-award me-2"></i> Başarılar & Sertifikalar
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                    <?php elseif ($request === 'edit_about'): ?>
+                        <!-- Hakkımda Düzenleme -->
+                        <?php
+                        $section = isset($_GET['section']) ? $_GET['section'] : 'bio';
+                        $about = ['id' => 0, 'title' => 'Bölüm Başlığı', 'content' => 'Bölüm içeriği'];
+
+                        if ($db_initialized) {
+                            $db = getDB();
+                            if ($db) {
+                                $stmt = $db->prepare("SELECT * FROM about_sections WHERE section_type = ?");
+                                $stmt->bind_param("s", $section);
+                                $stmt->execute();
+                                $result = $stmt->get_result();
+                                if ($result->num_rows > 0) {
+                                    $about = $result->fetch_assoc();
+                                }
+                            }
+                        }
+                        ?>
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Düzenle: <?= $about['title'] ?></h5>
+                                <a href="?admin&page=about" class="btn btn-sm btn-secondary">
+                                    <i class="fas fa-arrow-left"></i> Geri Dön
+                                </a>
+                            </div>
+                            <div class="card-body">
+                                <form method="POST">
+                                    <input type="hidden" name="action" value="save_about">
+                                    <input type="hidden" name="id" value="<?= $about['id'] ?>">
+                                    <div class="mb-3">
+                                        <label class="form-label">Başlık</label>
+                                        <input type="text" name="title" class="form-control" value="<?= htmlspecialchars($about['title']) ?>" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">İçerik</label>
+                                        <textarea name="content" class="form-control" rows="12" required><?= htmlspecialchars($about['content']) ?></textarea>
+                                    </div>
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="fas fa-save me-2"></i> Kaydet
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                    <?php elseif ($request === 'blog'): ?>
+                        <!-- Blog Yönetimi -->
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Blog Yazıları Yönetimi</h5>
+                                <a href="?admin&page=add_blog" class="btn btn-sm btn-success">
+                                    <i class="fas fa-plus me-1"></i> Yeni Yazı
+                                </a>
+                            </div>
+                            <div class="card-body">
+                                <?php if (!$db_initialized): ?>
+                                    <div class="alert alert-warning">
+                                        Veritabanı bağlantısı olmadığı için blog yazıları görüntülenemiyor.
+                                    </div>
+                                <?php else: ?>
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered">
+                                            <thead>
+                                            <tr>
+                                                <th>Başlık</th>
+                                                <th>Kategori</th>
+                                                <th>Tarih</th>
+                                                <th>İşlemler</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            <?php
+                                            $db = getDB();
+                                            if ($db) {
+                                                $posts = $db->query("SELECT * FROM blog_posts ORDER BY created_at DESC");
+                                                while ($post = $posts->fetch_assoc()):
+                                                    ?>
+                                                    <tr>
+                                                        <td><?= htmlspecialchars($post['title']) ?></td>
+                                                        <td><?= $post['category'] ?></td>
+                                                        <td><?= date('d.m.Y', strtotime($post['created_at'])) ?></td>
+                                                        <td>
+                                                            <a href="?admin&page=edit_blog&id=<?= $post['id'] ?>" class="btn btn-sm btn-primary">
+                                                                <i class="fas fa-edit"></i> Düzenle
+                                                            </a>
+                                                            <form method="POST" style="display:inline-block;">
+                                                                <input type="hidden" name="action" value="delete_blog">
+                                                                <input type="hidden" name="id" value="<?= $post['id'] ?>">
+                                                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Bu yazıyı silmek istediğinize emin misiniz?')">
+                                                                    <i class="fas fa-trash"></i> Sil
+                                                                </button>
+                                                            </form>
+                                                        </td>
+                                                    </tr>
+                                                <?php endwhile; } ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+
+                    <?php elseif ($request === 'add_blog' || $request === 'edit_blog'): ?>
+                        <!-- Blog Ekleme/Düzenleme -->
+                        <?php
+                        $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+                        $post = ['id' => 0, 'title' => '', 'content' => '', 'category' => 'Kişisel'];
+
+                        if ($id > 0 && $db_initialized) {
+                            $db = getDB();
+                            if ($db) {
+                                $stmt = $db->prepare("SELECT * FROM blog_posts WHERE id = ?");
+                                $stmt->bind_param("i", $id);
+                                $stmt->execute();
+                                $result = $stmt->get_result();
+                                if ($result->num_rows > 0) {
+                                    $post = $result->fetch_assoc();
+                                }
+                            }
+                        }
+                        ?>
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0"><?= $id ? 'Blog Yazısını Düzenle' : 'Yeni Blog Yazısı Ekle' ?></h5>
+                                <a href="?admin&page=blog" class="btn btn-sm btn-secondary">
+                                    <i class="fas fa-arrow-left"></i> Geri Dön
+                                </a>
+                            </div>
+                            <div class="card-body">
+                                <form method="POST">
+                                    <input type="hidden" name="action" value="save_blog">
+                                    <input type="hidden" name="id" value="<?= $post['id'] ?>">
+                                    <div class="mb-3">
+                                        <label class="form-label">Başlık</label>
+                                        <input type="text" name="title" class="form-control" value="<?= htmlspecialchars($post['title']) ?>" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Kategori</label>
+                                        <select name="category" class="form-select" required>
+                                            <option value="Kişisel" <?= $post['category'] === 'Kişisel' ? 'selected' : '' ?>>Kişisel</option>
+                                            <option value="Seyahat" <?= $post['category'] === 'Seyahat' ? 'selected' : '' ?>>Seyahat</option>
+                                            <option value="Kitap-Film" <?= $post['category'] === 'Kitap-Film' ? 'selected' : '' ?>>Kitap & Film</option>
+                                            <option value="Teknoloji" <?= $post['category'] === 'Teknoloji' ? 'selected' : '' ?>>Teknoloji</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">İçerik</label>
+                                        <textarea name="content" class="form-control" rows="12" required><?= htmlspecialchars($post['content']) ?></textarea>
+                                    </div>
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="fas fa-save me-2"></i> <?= $id ? 'Güncelle' : 'Oluştur' ?>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                    <?php elseif ($request === 'gallery'): ?>
+                        <!-- Galeri Yönetimi -->
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Galeri Yönetimi</h5>
+                                <a href="?admin&page=add_gallery" class="btn btn-sm btn-success">
+                                    <i class="fas fa-plus me-1"></i> Yeni Öğe
+                                </a>
+                            </div>
+                            <div class="card-body">
+                                <?php if (!$db_initialized): ?>
+                                    <div class="alert alert-warning">
+                                        Veritabanı bağlantısı olmadığı için galeri öğeleri görüntülenemiyor.
+                                    </div>
+                                <?php else: ?>
+                                    <div class="row">
+                                        <?php
+                                        $db = getDB();
+                                        if ($db) {
+                                            $galleryItems = $db->query("SELECT * FROM gallery_items ORDER BY id DESC");
+                                            while ($item = $galleryItems->fetch_assoc()):
+                                                ?>
+                                                <div class="col-md-4 mb-4">
+                                                    <div class="card">
+                                                        <img src="<?= htmlspecialchars($item['image_path']) ?>" class="card-img-top" alt="<?= htmlspecialchars($item['title']) ?>" style="height: 200px; object-fit: cover;">
+                                                        <div class="card-body">
+                                                            <h5 class="card-title"><?= htmlspecialchars($item['title']) ?></h5>
+                                                            <p class="card-text text-muted"><?= $item['category'] ?></p>
+                                                            <div class="d-flex justify-content-between">
+                                                                <a href="?admin&page=edit_gallery&id=<?= $item['id'] ?>" class="btn btn-sm btn-primary">
+                                                                    <i class="fas fa-edit"></i> Düzenle
+                                                                </a>
+                                                                <form method="POST">
+                                                                    <input type="hidden" name="action" value="delete_gallery">
+                                                                    <input type="hidden" name="id" value="<?= $item['id'] ?>">
+                                                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Bu öğeyi silmek istediğinize emin misiniz?')">
+                                                                        <i class="fas fa-trash"></i> Sil
+                                                                    </button>
+                                                                </form>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            <?php endwhile; } ?>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+
+                    <?php elseif ($request === 'add_gallery' || $request === 'edit_gallery'): ?>
+                        <!-- Galeri Ekleme/Düzenleme -->
+                        <?php
+                        $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+                        $item = ['id' => 0, 'title' => '', 'image_path' => '', 'category' => 'Fotoğraflar', 'description' => ''];
+
+                        if ($id > 0 && $db_initialized) {
+                            $db = getDB();
+                            if ($db) {
+                                $stmt = $db->prepare("SELECT * FROM gallery_items WHERE id = ?");
+                                $stmt->bind_param("i", $id);
+                                $stmt->execute();
+                                $result = $stmt->get_result();
+                                if ($result->num_rows > 0) {
+                                    $item = $result->fetch_assoc();
+                                }
+                            }
+                        }
+                        ?>
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0"><?= $id ? 'Galeri Öğesini Düzenle' : 'Yeni Galeri Öğesi Ekle' ?></h5>
+                                <a href="?admin&page=gallery" class="btn btn-sm btn-secondary">
+                                    <i class="fas fa-arrow-left"></i> Geri Dön
+                                </a>
+                            </div>
+                            <div class="card-body">
+                                <form method="POST" enctype="multipart/form-data">
+                                    <input type="hidden" name="action" value="save_gallery">
+                                    <input type="hidden" name="id" value="<?= $item['id'] ?>">
+                                    <input type="hidden" name="current_image" value="<?= $item['image_path'] ?>">
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Başlık</label>
+                                        <input type="text" name="title" class="form-control" value="<?= htmlspecialchars($item['title']) ?>" required>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Kategori</label>
+                                        <select name="category" class="form-select" required>
+                                            <option value="Fotoğraflar" <?= $item['category'] === 'Fotoğraflar' ? 'selected' : '' ?>>Fotoğraflar</option>
+                                            <option value="Hobiler" <?= $item['category'] === 'Hobiler' ? 'selected' : '' ?>>Hobiler</option>
+                                            <option value="Videolar" <?= $item['category'] === 'Videolar' ? 'selected' : '' ?>>Videolar</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Açıklama</label>
+                                        <textarea name="description" class="form-control" rows="3"><?= htmlspecialchars($item['description']) ?></textarea>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Resim</label>
+                                        <?php if ($item['image_path']): ?>
+                                            <div class="mb-2">
+                                                <img src="<?= $item['image_path'] ?>" class="img-thumbnail" style="max-height: 200px;">
+                                            </div>
+                                        <?php endif; ?>
+                                        <input type="file" name="image" class="form-control">
+                                    </div>
+
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="fas fa-save me-2"></i> <?= $id ? 'Güncelle' : 'Oluştur' ?>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                    <?php elseif ($request === 'faq'): ?>
+                        <!-- SSS Yönetimi -->
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">SSS (Sıkça Sorulan Sorular) Yönetimi</h5>
+                                <a href="?admin&page=add_faq" class="btn btn-sm btn-success">
+                                    <i class="fas fa-plus me-1"></i> Yeni Soru
+                                </a>
+                            </div>
+                            <div class="card-body">
+                                <?php if (!$db_initialized): ?>
+                                    <div class="alert alert-warning">
+                                        Veritabanı bağlantısı olmadığı için SSS görüntülenemiyor.
+                                    </div>
+                                <?php else: ?>
+                                    <div class="list-group">
+                                        <?php
+                                        $db = getDB();
+                                        if ($db) {
+                                            $faqs = $db->query("SELECT * FROM faqs ORDER BY created_at DESC");
+                                            while ($faq = $faqs->fetch_assoc()):
+                                                ?>
+                                                <div class="list-group-item">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <div>
+                                                            <h6 class="mb-1"><?= htmlspecialchars($faq['question']) ?></h6>
+                                                            <p class="mb-0 text-muted"><?= mb_substr(strip_tags($faq['answer']), 0, 100) ?>...</p>
+                                                        </div>
+                                                        <div>
+                                                            <a href="?admin&page=edit_faq&id=<?= $faq['id'] ?>" class="btn btn-sm btn-primary">
+                                                                <i class="fas fa-edit"></i> Düzenle
+                                                            </a>
+                                                            <form method="POST" style="display:inline-block;">
+                                                                <input type="hidden" name="action" value="delete_faq">
+                                                                <input type="hidden" name="id" value="<?= $faq['id'] ?>">
+                                                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Bu soruyu silmek istediğinize emin misiniz?')">
+                                                                    <i class="fas fa-trash"></i> Sil
+                                                                </button>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            <?php endwhile; } ?>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+
+                    <?php elseif ($request === 'add_faq' || $request === 'edit_faq'): ?>
+                        <!-- SSS Ekleme/Düzenleme -->
+                        <?php
+                        $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+                        $faq = ['id' => 0, 'question' => '', 'answer' => ''];
+
+                        if ($id > 0 && $db_initialized) {
+                            $db = getDB();
+                            if ($db) {
+                                $stmt = $db->prepare("SELECT * FROM faqs WHERE id = ?");
+                                $stmt->bind_param("i", $id);
+                                $stmt->execute();
+                                $result = $stmt->get_result();
+                                if ($result->num_rows > 0) {
+                                    $faq = $result->fetch_assoc();
+                                }
+                            }
+                        }
+                        ?>
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0"><?= $id ? 'SSS Düzenle' : 'Yeni SSS Ekle' ?></h5>
+                                <a href="?admin&page=faq" class="btn btn-sm btn-secondary">
+                                    <i class="fas fa-arrow-left"></i> Geri Dön
+                                </a>
+                            </div>
+                            <div class="card-body">
+                                <form method="POST">
+                                    <input type="hidden" name="action" value="save_faq">
+                                    <input type="hidden" name="id" value="<?= $faq['id'] ?>">
+                                    <div class="mb-3">
+                                        <label class="form-label">Soru</label>
+                                        <input type="text" name="question" class="form-control" value="<?= htmlspecialchars($faq['question']) ?>" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Cevap</label>
+                                        <textarea name="answer" class="form-control" rows="5" required><?= htmlspecialchars($faq['answer']) ?></textarea>
+                                    </div>
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="fas fa-save me-2"></i> <?= $id ? 'Güncelle' : 'Oluştur' ?>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
 
                     <?php endif; ?>
                 </div>
@@ -779,8 +1260,148 @@ if (isset($_GET['logout'])) {
                 </div>
             </div>
 
+        <?php elseif ($request === 'about_bio'): ?>
+            <!-- BIOGRAPHY PAGE -->
+            <div class="row">
+                <div class="col-lg-8 mx-auto">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="mb-0">Biyografi</h2>
+                        </div>
+                        <div class="card-body">
+                            <?php if ($db_initialized): ?>
+                                <?php
+                                $db = getDB();
+                                $about = $db ? $db->query("SELECT * FROM about_sections WHERE section_type = 'bio'") : false;
+                                if ($about && $about->num_rows > 0) {
+                                    $bio = $about->fetch_assoc();
+                                    echo $bio['content'];
+                                } else {
+                                    echo '<div class="empty-state">
+                                            <i class="fas fa-user-circle"></i>
+                                            <h3>Henüz biyografi eklenmemiş</h3>
+                                            <p>Yönetici panelinden biyografi bilgilerinizi ekleyebilirsiniz.</p>
+                                        </div>';
+                                }
+                                ?>
+                            <?php else: ?>
+                                <div class="empty-state">
+                                    <i class="fas fa-database"></i>
+                                    <h3>Veriye ulaşılamıyor</h3>
+                                    <p>Veritabanı bağlantısı olmadığı için içerik gösterilemiyor.</p>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        <?php elseif ($request === 'blog'): ?>
+            <!-- BLOG PAGE -->
+            <div class="row">
+                <div class="col-lg-8 mx-auto">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="mb-0">Blog Yazılarım</h2>
+                        </div>
+                        <div class="card-body">
+                            <?php if ($db_initialized): ?>
+                                <div class="row">
+                                    <?php
+                                    $db = getDB();
+                                    if ($db) {
+                                        $posts = $db->query("SELECT * FROM blog_posts ORDER BY created_at DESC");
+                                        if ($posts && $posts->num_rows > 0) {
+                                            while ($post = $posts->fetch_assoc()):
+                                                ?>
+                                                <div class="col-md-6 mb-4">
+                                                    <div class="card blog-card h-100">
+                                                        <div class="card-body">
+                                                            <h5 class="card-title"><?= htmlspecialchars($post['title']) ?></h5>
+                                                            <p class="card-text text-muted">
+                                                                <small>
+                                                                    <?= date('d.m.Y', strtotime($post['created_at'])) ?> |
+                                                                    <span class="badge bg-primary"><?= $post['category'] ?></span>
+                                                                </small>
+                                                            </p>
+                                                            <p class="card-text"><?= mb_substr(strip_tags($post['content']), 0, 150) ?>...</p>
+                                                            <a href="?page=blog_post&id=<?= $post['id'] ?>" class="btn btn-outline-primary">Devamını Oku</a>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            <?php endwhile;
+                                        } else {
+                                            echo '<div class="col-12">
+                                                    <div class="empty-state">
+                                                        <i class="fas fa-newspaper"></i>
+                                                        <h3>Henüz blog yazısı eklenmemiş</h3>
+                                                        <p>Yönetici panelinden blog yazıları ekleyebilirsiniz.</p>
+                                                    </div>
+                                                </div>';
+                                        }
+                                    } else {
+                                        echo '<div class="col-12">
+                                                <div class="alert alert-danger">Veritabanı bağlantı hatası</div>
+                                            </div>';
+                                    }
+                                    ?>
+                                </div>
+                            <?php else: ?>
+                                <div class="empty-state">
+                                    <i class="fas fa-database"></i>
+                                    <h3>Veriye ulaşılamıyor</h3>
+                                    <p>Veritabanı bağlantısı olmadığı için içerik gösterilemiyor.</p>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Diğer sayfalar aynı mantıkla düzenlendi -->
 
+        <?php else: ?>
+            <!-- DYNAMIC PAGE CONTENT -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="mb-0"><?= isset($pageContent['title']) ? htmlspecialchars($pageContent['title']) : 'Sayfa Başlığı' ?></h2>
+                        </div>
+                        <div class="card-body">
+                            <?php if ($db_initialized): ?>
+                                <?php
+                                $db = getDB();
+                                if ($db) {
+                                    $currentPage = $db->prepare("SELECT * FROM pages WHERE slug = ?");
+                                    $currentPage->bind_param("s", $request);
+                                    $currentPage->execute();
+                                    $pageContent = $currentPage->get_result()->fetch_assoc();
+
+                                    if ($pageContent) {
+                                        echo $pageContent['content'];
+                                    } else {
+                                        echo '<div class="empty-state">
+                                                <i class="fas fa-file-alt"></i>
+                                                <h3>Sayfa içeriği henüz eklenmemiş</h3>
+                                                <p>Yönetici panelinden bu sayfanın içeriğini düzenleyebilirsiniz.</p>
+                                            </div>';
+                                    }
+                                } else {
+                                    echo '<div class="alert alert-danger">Veritabanı bağlantı hatası</div>';
+                                }
+                                ?>
+                            <?php else: ?>
+                                <div class="empty-state">
+                                    <i class="fas fa-database"></i>
+                                    <h3>Veriye ulaşılamıyor</h3>
+                                    <p>Veritabanı bağlantısı olmadığı için içerik gösterilemiyor.</p>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
         <?php endif; ?>
     </div>
 
