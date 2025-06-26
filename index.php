@@ -380,14 +380,26 @@ function handleAdminActions() {
                 $stmt->bind_param("ssi", $title, $content, $id);
                 return $stmt->execute();
 
-            case 'save_setting':
-                $setting_key = isset($_POST['setting_key']) ? $_POST['setting_key'] : '';
-                $setting_value = isset($_POST['setting_value']) ? $_POST['setting_value'] : '';
+            // SITE AYARLARI DÜZELTMESİ - BAŞLANGIÇ
+            case 'save_settings':
+                $settings = isset($_POST['settings']) ? $_POST['settings'] : [];
 
-                $stmt = $db->prepare("INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?)
-                                      ON DUPLICATE KEY UPDATE setting_value = ?");
-                $stmt->bind_param("sss", $setting_key, $setting_value, $setting_value);
-                return $stmt->execute();
+                if (!empty($settings) && is_array($settings)) {
+                    $success = true;
+
+                    foreach ($settings as $key => $value) {
+                        $stmt = $db->prepare("INSERT INTO site_settings (setting_key, setting_value) 
+                                              VALUES (?, ?) 
+                                              ON DUPLICATE KEY UPDATE setting_value = ?");
+                        $stmt->bind_param("sss", $key, $value, $value);
+                        if (!$stmt->execute()) {
+                            $success = false;
+                        }
+                    }
+                    return $success;
+                }
+                return false;
+            // SITE AYARLARI DÜZELTMESİ - BİTİŞ
 
             case 'save_contact':
                 $name = isset($_POST['name']) ? $_POST['name'] : '';
@@ -1767,67 +1779,67 @@ if (isset($_GET['logout'])) {
                         </div>
 
                     <?php elseif ($request === 'settings'): ?>
-                        <!-- Site Ayarları -->
+                        <!-- SITE AYARLARI DÜZELTMESİ - BAŞLANGIÇ -->
                         <div class="card">
                             <div class="card-header">
                                 <h5 class="mb-0">Site Ayarları</h5>
                             </div>
                             <div class="card-body">
                                 <form method="POST">
-                                    <input type="hidden" name="action" value="save_setting">
+                                    <input type="hidden" name="action" value="save_settings">
 
                                     <div class="mb-3">
                                         <label class="form-label">Site Başlığı</label>
-                                        <input type="text" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('site_title', SITE_TITLE)) ?>" required>
-                                        <input type="hidden" name="setting_key" value="site_title">
+                                        <input type="text" name="settings[site_title]" class="form-control"
+                                               value="<?= htmlspecialchars(getSetting('site_title', SITE_TITLE)) ?>" required>
                                     </div>
 
                                     <div class="mb-3">
                                         <label class="form-label">Adres</label>
-                                        <input type="text" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('address')) ?>" required>
-                                        <input type="hidden" name="setting_key" value="address">
+                                        <input type="text" name="settings[address]" class="form-control"
+                                               value="<?= htmlspecialchars(getSetting('address', 'İstanbul, Türkiye')) ?>" required>
                                     </div>
 
                                     <div class="mb-3">
                                         <label class="form-label">E-posta</label>
-                                        <input type="email" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('email')) ?>" required>
-                                        <input type="hidden" name="setting_key" value="email">
+                                        <input type="email" name="settings[email]" class="form-control"
+                                               value="<?= htmlspecialchars(getSetting('email', 'info@muratcandas.com')) ?>" required>
                                     </div>
 
                                     <div class="mb-3">
                                         <label class="form-label">Telefon</label>
-                                        <input type="text" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('phone')) ?>" required>
-                                        <input type="hidden" name="setting_key" value="phone">
+                                        <input type="text" name="settings[phone]" class="form-control"
+                                               value="<?= htmlspecialchars(getSetting('phone', '+90 555 123 4567')) ?>" required>
                                     </div>
 
                                     <div class="mb-3">
                                         <label class="form-label">Facebook</label>
-                                        <input type="url" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('facebook')) ?>">
-                                        <input type="hidden" name="setting_key" value="facebook">
+                                        <input type="url" name="settings[facebook]" class="form-control"
+                                               value="<?= htmlspecialchars(getSetting('facebook', 'https://facebook.com/muratcandas')) ?>">
                                     </div>
 
                                     <div class="mb-3">
                                         <label class="form-label">Twitter</label>
-                                        <input type="url" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('twitter')) ?>">
-                                        <input type="hidden" name="setting_key" value="twitter">
+                                        <input type="url" name="settings[twitter]" class="form-control"
+                                               value="<?= htmlspecialchars(getSetting('twitter', 'https://twitter.com/muratcandas')) ?>">
                                     </div>
 
                                     <div class="mb-3">
                                         <label class="form-label">Instagram</label>
-                                        <input type="url" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('instagram')) ?>">
-                                        <input type="hidden" name="setting_key" value="instagram">
+                                        <input type="url" name="settings[instagram]" class="form-control"
+                                               value="<?= htmlspecialchars(getSetting('instagram', 'https://instagram.com/muratcandas')) ?>">
                                     </div>
 
                                     <div class="mb-3">
                                         <label class="form-label">LinkedIn</label>
-                                        <input type="url" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('linkedin')) ?>">
-                                        <input type="hidden" name="setting_key" value="linkedin">
+                                        <input type="url" name="settings[linkedin]" class="form-control"
+                                               value="<?= htmlspecialchars(getSetting('linkedin', 'https://linkedin.com/in/muratcandas')) ?>">
                                     </div>
 
                                     <div class="mb-3">
                                         <label class="form-label">GitHub</label>
-                                        <input type="url" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('github')) ?>">
-                                        <input type="hidden" name="setting_key" value="github">
+                                        <input type="url" name="settings[github]" class="form-control"
+                                               value="<?= htmlspecialchars(getSetting('github', 'https://github.com/muratcandas')) ?>">
                                     </div>
 
                                     <button type="submit" class="btn btn-success">
@@ -1836,6 +1848,7 @@ if (isset($_GET['logout'])) {
                                 </form>
                             </div>
                         </div>
+                        <!-- SITE AYARLARI DÜZELTMESİ - BİTİŞ -->
 
                     <?php endif; ?>
                 </div>
