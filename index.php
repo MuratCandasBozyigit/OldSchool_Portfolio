@@ -433,17 +433,31 @@ if (isset($_GET['logout'])) {
             --dark: #121212;
             --darker: #0a0a0a;
             --dark-light: #1e1e1e;
-            --text: #f8f9fa;
+            --text: #ffffff; /* Tüm metinler beyaz */
             --text-muted: #adb5bd;
         }
 
         body {
             font-family: 'Nunito', sans-serif;
             background: var(--darker);
-            color: var(--text);
+            color: var(--text); /* Tüm metinler beyaz */
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+        }
+
+        /* Diğer tüm elementler için beyaz metin */
+        .navbar, .card, .card-header, .card-body, .list-group-item,
+        .accordion-button, .table, .alert, .form-label, .text-muted,
+        .footer-links a, .contact-form .form-control, .btn-outline-light,
+        .social-link, .stat-card, .admin-editable, .gallery-item, .blog-card,
+        .empty-state, .section-header, .feature-icon, .btn-gradient, .admin-badge {
+            color: var(--text) !important;
+        }
+
+        /* Text-muted için özel renk */
+        .text-muted {
+            color: var(--text-muted) !important;
         }
 
         .navbar {
@@ -713,10 +727,6 @@ if (isset($_GET['logout'])) {
             background-color: var(--dark-light);
             color: var(--text);
             border: none;
-        }
-
-        .text-muted {
-            color: var(--text-muted) !important;
         }
 
         .form-label {
@@ -1347,7 +1357,7 @@ if (isset($_GET['logout'])) {
                                                                 <h5 class="card-title"><?= htmlspecialchars($item['title']) ?></h5>
                                                                 <p class="card-text text-muted"><?= $item['category'] ?></p>
                                                                 <div class="d-flex justify-content-between">
-                                                                    <a href="?admin&page=edit_gallery&id=<?= $item['id'] ?>" class="btn btn-sm btn-primary">
+                                                                    <a href="?admin&page=edit_gallery&id=<?= $item['id'] ?>" class="btn btn-sm btn-primary me-2">
                                                                         <i class="fas fa-edit me-1"></i> Düzenle
                                                                     </a>
                                                                     <form method="POST">
@@ -1436,6 +1446,7 @@ if (isset($_GET['logout'])) {
                                             </div>
                                         <?php endif; ?>
                                         <input type="file" name="image" class="form-control">
+                                        <small class="text-muted">Dosya yolu: <?= $item['image_path'] ?></small>
                                     </div>
 
                                     <button type="submit" class="btn btn-success">
@@ -1464,7 +1475,8 @@ if (isset($_GET['logout'])) {
                                         <?php
                                         $db = getDB();
                                         if ($db) {
-                                            $faqs = $db->query("SELECT * FROM faqs ORDER BY created_at DESC");
+                                            // HATA DÜZELTME: created_at -> id kullanıldı
+                                            $faqs = $db->query("SELECT * FROM faqs ORDER BY id DESC");
                                             if ($faqs && $faqs->num_rows > 0) {
                                                 while ($faq = $faqs->fetch_assoc()):
                                                     ?>
@@ -2169,7 +2181,8 @@ if (isset($_GET['logout'])) {
                                         <?php
                                         $db = getDB();
                                         if ($db) {
-                                            $faqs = $db->query("SELECT * FROM faqs ORDER BY created_at DESC");
+                                            // HATA DÜZELTME: created_at -> id kullanıldı
+                                            $faqs = $db->query("SELECT * FROM faqs ORDER BY id DESC");
                                             if ($faqs && $faqs->num_rows > 0) {
                                                 $count = 0;
                                                 while ($faq = $faqs->fetch_assoc()):
