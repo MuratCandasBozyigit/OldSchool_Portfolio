@@ -16,7 +16,7 @@ define('DB_NAME', 'web_projesi_db');
 /* ===== SITE CONFIGURATION ===== */
 define('ADMIN_USER', 'admin');
 define('ADMIN_PASS', 'admin123');
-define('SITE_TITLE', 'Kişisel Web Sitem');
+define('SITE_TITLE', 'Murat Candaş Bozyiğit');
 date_default_timezone_set('Europe/Istanbul');
 
 /* ===== DATABASE INITIALIZATION ===== */
@@ -94,6 +94,12 @@ function initializeDatabase() {
                 subject VARCHAR(200) NOT NULL,
                 message TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )",
+
+            "CREATE TABLE IF NOT EXISTS site_settings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                setting_key VARCHAR(50) NOT NULL UNIQUE,
+                setting_value TEXT NOT NULL
             )"
         ];
 
@@ -149,18 +155,23 @@ function initializeDatabase() {
             }
         }
 
-        // Demo blog yazıları ekle
-        $blogCheck = $conn->query("SELECT COUNT(*) as cnt FROM blog_posts");
-        if ($blogCheck && $blogCheck->fetch_assoc()['cnt'] == 0) {
-            $demoPosts = [
-                ['title' => 'Web Geliştirme Yolculuğum', 'content' => 'Web geliştirme öğrenme yolculuğumda karşılaştığım zorluklar ve öğrendiklerim...', 'category' => 'Teknoloji'],
-                ['title' => 'İtalya Seyahat Notları', 'content' => 'Roma, Floransa ve Venedik\'te unutulmaz bir hafta sonu...', 'category' => 'Seyahat'],
-                ['title' => 'En Sevdiklerim: Kitap ve Film', 'content' => 'Son zamanlarda okuduğum kitaplar ve izlediğim filmler hakkında düşüncelerim...', 'category' => 'Kitap-Film']
-            ];
+        // Site ayarlarını oluştur (yoksa)
+        $settings = [
+            ['address', 'İstanbul, Türkiye'],
+            ['email', 'info@muratcandas.com'],
+            ['phone', '+90 555 123 4567'],
+            ['facebook', 'https://facebook.com/muratcandas'],
+            ['twitter', 'https://twitter.com/muratcandas'],
+            ['instagram', 'https://instagram.com/muratcandas'],
+            ['linkedin', 'https://linkedin.com/in/muratcandas'],
+            ['github', 'https://github.com/muratcandas']
+        ];
 
-            foreach ($demoPosts as $post) {
-                $stmt = $conn->prepare("INSERT INTO blog_posts (title, content, category) VALUES (?, ?, ?)");
-                $stmt->bind_param("sss", $post['title'], $post['content'], $post['category']);
+        foreach ($settings as $setting) {
+            $check = $conn->query("SELECT id FROM site_settings WHERE setting_key = '{$setting[0]}'");
+            if ($check && $check->num_rows === 0) {
+                $stmt = $conn->prepare("INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?)");
+                $stmt->bind_param("ss", $setting[0], $setting[1]);
                 $stmt->execute();
             }
         }
@@ -198,6 +209,23 @@ function getDB() {
     return $db;
 }
 
+function getSetting($key, $default = '') {
+    $db = getDB();
+    if (!$db) return $default;
+
+    $stmt = $db->prepare("SELECT setting_value FROM site_settings WHERE setting_key = ?");
+    $stmt->bind_param("s", $key);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result && $result->num_rows > 0) {
+        $row = $result->fetch_assoc();
+        return $row['setting_value'];
+    }
+
+    return $default;
+}
+
 function isAdminLoggedIn() {
     return isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
 }
@@ -221,6 +249,8 @@ function handleAdminActions() {
         $email = isset($_POST['email']) ? $_POST['email'] : '';
         $subject = isset($_POST['subject']) ? $_POST['subject'] : '';
         $message = isset($_POST['message']) ? $_POST['message'] : '';
+        $setting_key = isset($_POST['setting_key']) ? $_POST['setting_key'] : '';
+        $setting_value = isset($_POST['setting_value']) ? $_POST['setting_value'] : '';
 
         switch ($action) {
             case 'login':
@@ -334,20 +364,23 @@ function handleAdminActions() {
                 $stmt->bind_param("ssi", $title, $content, $id);
                 return $stmt->execute();
 
+            case 'save_setting':
+                $setting_key = isset($_POST['setting_key']) ? $_POST['setting_key'] : '';
+                $setting_value = isset($_POST['setting_value']) ? $_POST['setting_value'] : '';
+
+                $stmt = $db->prepare("INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?)
+                                      ON DUPLICATE KEY UPDATE setting_value = ?");
+                $stmt->bind_param("sss", $setting_key, $setting_value, $setting_value);
+                return $stmt->execute();
+
             case 'save_contact':
-                $id = intval($id);
                 $name = isset($_POST['name']) ? $_POST['name'] : '';
                 $email = isset($_POST['email']) ? $_POST['email'] : '';
                 $subject = isset($_POST['subject']) ? $_POST['subject'] : '';
                 $message = isset($_POST['message']) ? $_POST['message'] : '';
 
-                if ($id > 0) {
-                    $stmt = $db->prepare("UPDATE contacts SET name = ?, email = ?, subject = ?, message = ? WHERE id = ?");
-                    $stmt->bind_param("ssssi", $name, $email, $subject, $message, $id);
-                } else {
-                    $stmt = $db->prepare("INSERT INTO contacts (name, email, subject, message) VALUES (?, ?, ?, ?)");
-                    $stmt->bind_param("ssss", $name, $email, $subject, $message);
-                }
+                $stmt = $db->prepare("INSERT INTO contacts (name, email, subject, message) VALUES (?, ?, ?, ?)");
+                $stmt->bind_param("ssss", $name, $email, $subject, $message);
                 return $stmt->execute();
 
             case 'delete_contact':
@@ -397,41 +430,40 @@ if (isset($_GET['logout'])) {
             --info: #36b9cc;
             --warning: #f6c23e;
             --danger: #e74a3b;
-            --light: #f8f9fc;
-            --dark: #5a5c69;
-            --soft-blue: #e3f2fd;
-            --soft-green: #e8f5e9;
-            --soft-yellow: #fffde7;
-            --soft-purple: #f3e5f5;
+            --dark: #121212;
+            --darker: #0a0a0a;
+            --dark-light: #1e1e1e;
+            --text: #f8f9fa;
+            --text-muted: #adb5bd;
         }
 
         body {
             font-family: 'Nunito', sans-serif;
-            background: linear-gradient(to bottom, #f8f9fc, #e9ecef);
-            color: #333;
+            background: var(--darker);
+            color: var(--text);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
         }
 
         .navbar {
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            background: linear-gradient(135deg, var(--primary) 0%, #224abe 100%);
+            background: var(--dark);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
         }
 
         .card {
             border: none;
             border-radius: 12px;
-            box-shadow: 0 0.15rem 1.5rem 0 rgba(58, 59, 69, 0.1);
+            box-shadow: 0 0.15rem 1.5rem 0 rgba(0, 0, 0, 0.3);
             margin-bottom: 1.5rem;
             transition: transform 0.3s, box-shadow 0.3s;
-            background-color: white;
+            background-color: var(--dark-light);
             overflow: hidden;
         }
 
         .card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 0.5rem 1.5rem rgba(0,0,0,0.1);
+            box-shadow: 0 0.5rem 1.5rem rgba(0,0,0,0.4);
         }
 
         .card-header {
@@ -445,8 +477,8 @@ if (isset($_GET['logout'])) {
 
         .sidebar {
             min-height: 100vh;
-            background: linear-gradient(180deg, var(--primary) 10%, #224abe 100%);
-            box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.2);
+            background: var(--dark);
+            box-shadow: 0 0.15rem 1.75rem 0 rgba(0, 0, 0, 0.3);
         }
 
         .admin-editable {
@@ -457,7 +489,7 @@ if (isset($_GET['logout'])) {
 
         .admin-editable:hover {
             border-color: var(--primary);
-            background: rgba(78, 115, 223, 0.05);
+            background: rgba(78, 115, 223, 0.1);
         }
 
         .gallery-item {
@@ -466,7 +498,7 @@ if (isset($_GET['logout'])) {
             border-radius: 10px;
             height: 200px;
             margin-bottom: 20px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
         }
 
         .gallery-item img {
@@ -487,18 +519,7 @@ if (isset($_GET['logout'])) {
 
         .blog-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 0.5rem 1.5rem rgba(0,0,0,0.1);
-        }
-
-        .faq-item {
-            border-bottom: 1px solid #eee;
-            padding: 15px 0;
-        }
-
-        .faq-question {
-            font-weight: 600;
-            cursor: pointer;
-            color: var(--primary);
+            box-shadow: 0 0.5rem 1.5rem rgba(0,0,0,0.4);
         }
 
         .toast-container {
@@ -515,15 +536,15 @@ if (isset($_GET['logout'])) {
         .empty-state {
             text-align: center;
             padding: 40px 20px;
-            color: #6c757d;
-            background-color: rgba(0,0,0,0.02);
+            color: var(--text-muted);
+            background-color: rgba(255,255,255,0.05);
             border-radius: 10px;
         }
 
         .empty-state i {
             font-size: 4rem;
             margin-bottom: 20px;
-            color: #e9ecef;
+            color: rgba(255,255,255,0.1);
         }
 
         .empty-state h3 {
@@ -567,15 +588,15 @@ if (isset($_GET['logout'])) {
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            background: var(--primary);
-            color: white;
+            background: var(--dark-light);
+            color: var(--text);
             margin-right: 10px;
             transition: all 0.3s;
         }
 
         .social-link:hover {
             transform: translateY(-3px);
-            background: #224abe;
+            background: var(--primary);
             text-decoration: none;
         }
 
@@ -597,23 +618,27 @@ if (isset($_GET['logout'])) {
         .contact-form .form-control {
             border-radius: 8px;
             padding: 12px 15px;
-            border: 1px solid #e0e0e0;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.05);
+            color: var(--text);
             transition: all 0.3s;
         }
 
         .contact-form .form-control:focus {
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(78, 115, 223, 0.2);
+            background: rgba(255,255,255,0.08);
         }
 
         footer {
-            background: linear-gradient(135deg, #2c3e50, #1a2530);
-            color: white;
+            background: var(--dark);
+            color: var(--text);
             margin-top: auto;
+            border-top: 1px solid rgba(255,255,255,0.1);
         }
 
         .footer-links a {
-            color: #ddd;
+            color: var(--text-muted);
             text-decoration: none;
             transition: all 0.3s;
             display: block;
@@ -621,7 +646,7 @@ if (isset($_GET['logout'])) {
         }
 
         .footer-links a:hover {
-            color: white;
+            color: var(--text);
             padding-left: 5px;
         }
 
@@ -629,7 +654,7 @@ if (isset($_GET['logout'])) {
             position: absolute;
             top: 10px;
             right: 10px;
-            background: rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.1);
             color: white;
             padding: 5px 10px;
             border-radius: 20px;
@@ -638,22 +663,65 @@ if (isset($_GET['logout'])) {
         }
 
         .admin-panel {
-            background: linear-gradient(135deg, #f8f9fc, #e9ecef);
+            background: var(--darker);
             min-height: 100vh;
         }
 
-        .bg-soft-blue { background-color: var(--soft-blue); }
-        .bg-soft-green { background-color: var(--soft-green); }
-        .bg-soft-yellow { background-color: var(--soft-yellow); }
-        .bg-soft-purple { background-color: var(--soft-purple); }
-
         .stat-card {
             border-left: 4px solid var(--primary);
+            background: var(--dark-light);
         }
 
         .stat-card.success { border-left-color: var(--success); }
         .stat-card.info { border-left-color: var(--info); }
         .stat-card.warning { border-left-color: var(--warning); }
+
+        .list-group-item {
+            background-color: var(--dark-light);
+            color: var(--text);
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        .accordion-button {
+            background-color: var(--dark-light);
+            color: var(--text);
+        }
+
+        .accordion-button:not(.collapsed) {
+            background-color: var(--dark);
+            color: var(--text);
+        }
+
+        .accordion-body {
+            background-color: var(--darker);
+            color: var(--text-muted);
+        }
+
+        .table {
+            color: var(--text);
+        }
+
+        .table-bordered {
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        .table-hover tbody tr:hover {
+            background-color: rgba(255,255,255,0.05);
+        }
+
+        .alert {
+            background-color: var(--dark-light);
+            color: var(--text);
+            border: none;
+        }
+
+        .text-muted {
+            color: var(--text-muted) !important;
+        }
+
+        .form-label {
+            color: var(--text);
+        }
     </style>
 </head>
 <body class="<?= $adminMode ? 'admin-panel' : '' ?>">
@@ -699,6 +767,11 @@ if (isset($_GET['logout'])) {
                         <i class="fas fa-envelope me-2"></i> İletişim Mesajları
                     </a>
                 </li>
+                <li class="nav-item mb-2">
+                    <a href="?admin&page=settings" class="nav-link text-white <?= $request === 'settings' ? 'active' : '' ?>">
+                        <i class="fas fa-cog me-2"></i> Site Ayarları
+                    </a>
+                </li>
             </ul>
             <div class="mt-auto">
                 <a href="?" class="btn btn-light w-100">
@@ -738,11 +811,11 @@ if (isset($_GET['logout'])) {
                 </div>
             <?php else: ?>
                 <!-- ADMIN DASHBOARD -->
-                <nav class="navbar navbar-light bg-white shadow-sm">
+                <nav class="navbar navbar-light" style="background: var(--dark-light);">
                     <div class="container-fluid">
                         <span class="navbar-brand text-primary fw-bold">Yönetim Paneli</span>
                         <div>
-                            <span class="me-3 text-muted">Hoş geldin, <?= ADMIN_USER ?></span>
+                            <span class="me-3 text-white">Hoş geldin, <?= ADMIN_USER ?></span>
                             <a href="?admin&logout" class="btn btn-sm btn-outline-danger">
                                 <i class="fas fa-sign-out-alt me-1"></i> Çıkış Yap
                             </a>
@@ -791,10 +864,10 @@ if (isset($_GET['logout'])) {
                                                                     }
                                                                 }
                                                                 ?>
-                                                                <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $blogCount ?></div>
+                                                                <div class="h5 mb-0 font-weight-bold text-gray-300"><?= $blogCount ?></div>
                                                             </div>
                                                             <div class="col-auto">
-                                                                <i class="fas fa-blog fa-2x text-gray-300"></i>
+                                                                <i class="fas fa-blog fa-2x text-gray-500"></i>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -816,10 +889,10 @@ if (isset($_GET['logout'])) {
                                                                     }
                                                                 }
                                                                 ?>
-                                                                <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $galleryCount ?></div>
+                                                                <div class="h5 mb-0 font-weight-bold text-gray-300"><?= $galleryCount ?></div>
                                                             </div>
                                                             <div class="col-auto">
-                                                                <i class="fas fa-images fa-2x text-gray-300"></i>
+                                                                <i class="fas fa-images fa-2x text-gray-500"></i>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -841,10 +914,10 @@ if (isset($_GET['logout'])) {
                                                                     }
                                                                 }
                                                                 ?>
-                                                                <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $faqCount ?></div>
+                                                                <div class="h5 mb-0 font-weight-bold text-gray-300"><?= $faqCount ?></div>
                                                             </div>
                                                             <div class="col-auto">
-                                                                <i class="fas fa-question-circle fa-2x text-gray-300"></i>
+                                                                <i class="fas fa-question-circle fa-2x text-gray-500"></i>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -866,10 +939,10 @@ if (isset($_GET['logout'])) {
                                                                     }
                                                                 }
                                                                 ?>
-                                                                <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $contactCount ?></div>
+                                                                <div class="h5 mb-0 font-weight-bold text-gray-300"><?= $contactCount ?></div>
                                                             </div>
                                                             <div class="col-auto">
-                                                                <i class="fas fa-envelope fa-2x text-gray-300"></i>
+                                                                <i class="fas fa-envelope fa-2x text-gray-500"></i>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -972,7 +1045,7 @@ if (isset($_GET['logout'])) {
                                 <?php else: ?>
                                     <div class="table-responsive">
                                         <table class="table table-bordered table-hover">
-                                            <thead class="table-light">
+                                            <thead class="table-dark">
                                             <tr>
                                                 <th>Sayfa Adı</th>
                                                 <th>URL</th>
@@ -1150,7 +1223,7 @@ if (isset($_GET['logout'])) {
                                 <?php else: ?>
                                     <div class="table-responsive">
                                         <table class="table table-bordered table-hover">
-                                            <thead class="table-light">
+                                            <thead class="table-dark">
                                             <tr>
                                                 <th>Başlık</th>
                                                 <th>Kategori</th>
@@ -1294,7 +1367,7 @@ if (isset($_GET['logout'])) {
                                                         <div class="alert alert-info text-center py-5">
                                                             <i class="fas fa-images fa-3x mb-3"></i>
                                                             <h4>Galeri boş</h4>
-                                                            <p>Yeni öğe eklemek için "Yeni Öğe" butonunu kullanın</p>
+                                                            <p class="text-muted">Yeni öğe eklemek için "Yeni Öğe" butonunu kullanın</p>
                                                         </div>
                                                     </div>';
                                             }
@@ -1488,7 +1561,7 @@ if (isset($_GET['logout'])) {
                                 <?php else: ?>
                                     <div class="table-responsive">
                                         <table class="table table-bordered table-hover">
-                                            <thead class="table-light">
+                                            <thead class="table-dark">
                                             <tr>
                                                 <th>Gönderen</th>
                                                 <th>Konu</th>
@@ -1594,10 +1667,81 @@ if (isset($_GET['logout'])) {
 
                                 <div class="mb-4">
                                     <h6>Mesaj İçeriği</h6>
-                                    <div class="p-3 bg-light rounded">
+                                    <div class="p-3 bg-dark rounded">
                                         <?= nl2br(htmlspecialchars($contact['message'])) ?>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+
+                    <?php elseif ($request === 'settings'): ?>
+                        <!-- Site Ayarları -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Site Ayarları</h5>
+                            </div>
+                            <div class="card-body">
+                                <form method="POST">
+                                    <input type="hidden" name="action" value="save_setting">
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Site Başlığı</label>
+                                        <input type="text" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('site_title', SITE_TITLE)) ?>" required>
+                                        <input type="hidden" name="setting_key" value="site_title">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Adres</label>
+                                        <input type="text" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('address')) ?>" required>
+                                        <input type="hidden" name="setting_key" value="address">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">E-posta</label>
+                                        <input type="email" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('email')) ?>" required>
+                                        <input type="hidden" name="setting_key" value="email">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Telefon</label>
+                                        <input type="text" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('phone')) ?>" required>
+                                        <input type="hidden" name="setting_key" value="phone">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Facebook</label>
+                                        <input type="url" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('facebook')) ?>">
+                                        <input type="hidden" name="setting_key" value="facebook">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Twitter</label>
+                                        <input type="url" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('twitter')) ?>">
+                                        <input type="hidden" name="setting_key" value="twitter">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Instagram</label>
+                                        <input type="url" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('instagram')) ?>">
+                                        <input type="hidden" name="setting_key" value="instagram">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">LinkedIn</label>
+                                        <input type="url" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('linkedin')) ?>">
+                                        <input type="hidden" name="setting_key" value="linkedin">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">GitHub</label>
+                                        <input type="url" name="setting_value" class="form-control" value="<?= htmlspecialchars(getSetting('github')) ?>">
+                                        <input type="hidden" name="setting_key" value="github">
+                                    </div>
+
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="fas fa-save me-2"></i> Ayarları Kaydet
+                                    </button>
+                                </form>
                             </div>
                         </div>
 
@@ -1611,7 +1755,7 @@ if (isset($_GET['logout'])) {
     <!-- PUBLIC WEBSITE LAYOUT -->
     <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container">
-            <a class="navbar-brand fw-bold" href="?"><?= SITE_TITLE ?></a>
+            <a class="navbar-brand fw-bold" href="?"><?= getSetting('site_title', SITE_TITLE) ?></a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -1624,7 +1768,7 @@ if (isset($_GET['logout'])) {
                         <a class="nav-link dropdown-toggle <?= strpos($request, 'about') === 0 ? 'active' : '' ?>" href="#" role="button" data-bs-toggle="dropdown">
                             Hakkımda
                         </a>
-                        <ul class="dropdown-menu">
+                        <ul class="dropdown-menu dropdown-menu-dark">
                             <li><a class="dropdown-item" href="?page=about_bio">Biyografi</a></li>
                             <li><a class="dropdown-item" href="?page=about_interests">İlgi Alanlarım</a></li>
                             <li><a class="dropdown-item" href="?page=about_education">Eğitim & Deneyim</a></li>
@@ -1665,8 +1809,8 @@ if (isset($_GET['logout'])) {
                 <section class="hero-section mb-5">
                     <div class="row align-items-center">
                         <div class="col-lg-6">
-                            <h1 class="display-4 fw-bold mb-4">Kişisel Web Siteme Hoş Geldiniz</h1>
-                            <p class="lead mb-4">Benim dünyama adım attınız. Burada benimle ilgili her şeyi bulabilir, ilgi alanlarımı keşfedebilir ve blog yazılarımla bilgi edinebilirsiniz.</p>
+                            <h1 class="display-4 fw-bold mb-4">Murat Candaş Bozyiğit</h1>
+                            <p class="lead mb-4">Kişisel web siteme hoş geldiniz. Burada benimle ilgili her şeyi bulabilir, ilgi alanlarımı keşfedebilir ve blog yazılarımla bilgi edinebilirsiniz.</p>
                             <div class="d-flex">
                                 <a href="?page=about_bio" class="btn-gradient me-3">Beni Tanıyın</a>
                                 <a href="?page=blog" class="btn btn-outline-primary">Blog Yazılarım</a>
@@ -1690,7 +1834,7 @@ if (isset($_GET['logout'])) {
                     </div>
                     <div class="row">
                         <div class="col-md-4 mb-4">
-                            <div class="card h-100 bg-soft-blue">
+                            <div class="card h-100">
                                 <div class="card-body p-4">
                                     <div class="feature-icon mx-auto">
                                         <i class="fas fa-laptop-code"></i>
@@ -1701,7 +1845,7 @@ if (isset($_GET['logout'])) {
                             </div>
                         </div>
                         <div class="col-md-4 mb-4">
-                            <div class="card h-100 bg-soft-green">
+                            <div class="card h-100">
                                 <div class="card-body p-4">
                                     <div class="feature-icon mx-auto">
                                         <i class="fas fa-mobile-alt"></i>
@@ -1712,7 +1856,7 @@ if (isset($_GET['logout'])) {
                             </div>
                         </div>
                         <div class="col-md-4 mb-4">
-                            <div class="card h-100 bg-soft-yellow">
+                            <div class="card h-100">
                                 <div class="card-body p-4">
                                     <div class="feature-icon mx-auto">
                                         <i class="fas fa-paint-brush"></i>
@@ -1850,7 +1994,7 @@ if (isset($_GET['logout'])) {
                         </div>
                     </div>
 
-                    <div class="col-lg-8">
+                    <div class="col-12">
                         <?php if ($db_initialized): ?>
                             <div class="row">
                                 <?php
@@ -1860,7 +2004,7 @@ if (isset($_GET['logout'])) {
                                     if ($posts && $posts->num_rows > 0) {
                                         while ($post = $posts->fetch_assoc()):
                                             ?>
-                                            <div class="col-md-6 mb-4">
+                                            <div class="col-md-4 mb-4">
                                                 <div class="card blog-card h-100">
                                                     <div class="card-body">
                                                         <h5 class="card-title"><?= htmlspecialchars($post['title']) ?></h5>
@@ -1899,56 +2043,6 @@ if (isset($_GET['logout'])) {
                                 <p>Veritabanı bağlantısı olmadığı için içerik gösterilemiyor.</p>
                             </div>
                         <?php endif; ?>
-                    </div>
-
-                    <div class="col-lg-4">
-                        <div class="card mb-4">
-                            <div class="card-header">
-                                <h5 class="mb-0">Kategoriler</h5>
-                            </div>
-                            <div class="card-body">
-                                <ul class="list-group list-group-flush">
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        Kişisel
-                                        <span class="badge bg-primary">3</span>
-                                    </li>
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        Seyahat
-                                        <span class="badge bg-primary">2</span>
-                                    </li>
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        Kitap & Film
-                                        <span class="badge bg-primary">5</span>
-                                    </li>
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        Teknoloji
-                                        <span class="badge bg-primary">7</span>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">Popüler Yazılar</h5>
-                            </div>
-                            <div class="card-body">
-                                <ul class="list-group list-group-flush">
-                                    <li class="list-group-item">
-                                        <a href="#" class="text-decoration-none">Web Geliştirme Yolculuğum</a>
-                                    </li>
-                                    <li class="list-group-item">
-                                        <a href="#" class="text-decoration-none">React.js ile Modern Web Uygulamaları</a>
-                                    </li>
-                                    <li class="list-group-item">
-                                        <a href="#" class="text-decoration-none">İtalya Seyahat Notları</a>
-                                    </li>
-                                    <li class="list-group-item">
-                                        <a href="#" class="text-decoration-none">2023'ün En İyi Teknoloji Kitapları</a>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
                     </div>
                 </div>
 
@@ -2124,54 +2218,71 @@ if (isset($_GET['logout'])) {
                                 <h2 class="mb-0">İletişim</h2>
                             </div>
                             <div class="card-body">
+                                <?php if ($actionResult): ?>
+                                    <div class="alert alert-success">
+                                        Mesajınız başarıyla gönderildi. En kısa sürede size dönüş yapacağım.
+                                    </div>
+                                <?php endif; ?>
+
                                 <div class="row">
                                     <div class="col-md-6 mb-4">
                                         <h5>İletişim Bilgilerim</h5>
                                         <ul class="list-unstyled">
                                             <li class="mb-3">
                                                 <i class="fas fa-map-marker-alt text-primary me-2"></i>
-                                                İstanbul, Türkiye
+                                                <?= htmlspecialchars(getSetting('address', 'İstanbul, Türkiye')) ?>
                                             </li>
                                             <li class="mb-3">
                                                 <i class="fas fa-envelope text-primary me-2"></i>
-                                                info@ornek.com
+                                                <?= htmlspecialchars(getSetting('email', 'info@muratcandas.com')) ?>
                                             </li>
                                             <li class="mb-3">
                                                 <i class="fas fa-phone text-primary me-2"></i>
-                                                +90 555 123 4567
+                                                <?= htmlspecialchars(getSetting('phone', '+90 555 123 4567')) ?>
                                             </li>
                                         </ul>
 
                                         <div class="mt-4">
                                             <h5>Sosyal Medya</h5>
                                             <div class="d-flex mt-3">
-                                                <a href="#" class="social-link"><i class="fab fa-facebook-f"></i></a>
-                                                <a href="#" class="social-link"><i class="fab fa-twitter"></i></a>
-                                                <a href="#" class="social-link"><i class="fab fa-instagram"></i></a>
-                                                <a href="#" class="social-link"><i class="fab fa-linkedin-in"></i></a>
-                                                <a href="#" class="social-link"><i class="fab fa-github"></i></a>
+                                                <?php if (getSetting('facebook')): ?>
+                                                    <a href="<?= htmlspecialchars(getSetting('facebook')) ?>" class="social-link" target="_blank"><i class="fab fa-facebook-f"></i></a>
+                                                <?php endif; ?>
+                                                <?php if (getSetting('twitter')): ?>
+                                                    <a href="<?= htmlspecialchars(getSetting('twitter')) ?>" class="social-link" target="_blank"><i class="fab fa-twitter"></i></a>
+                                                <?php endif; ?>
+                                                <?php if (getSetting('instagram')): ?>
+                                                    <a href="<?= htmlspecialchars(getSetting('instagram')) ?>" class="social-link" target="_blank"><i class="fab fa-instagram"></i></a>
+                                                <?php endif; ?>
+                                                <?php if (getSetting('linkedin')): ?>
+                                                    <a href="<?= htmlspecialchars(getSetting('linkedin')) ?>" class="social-link" target="_blank"><i class="fab fa-linkedin-in"></i></a>
+                                                <?php endif; ?>
+                                                <?php if (getSetting('github')): ?>
+                                                    <a href="<?= htmlspecialchars(getSetting('github')) ?>" class="social-link" target="_blank"><i class="fab fa-github"></i></a>
+                                                <?php endif; ?>
                                             </div>
                                         </div>
                                     </div>
 
                                     <div class="col-md-6">
                                         <h5>Mesaj Gönder</h5>
-                                        <form class="contact-form">
+                                        <form method="POST" class="contact-form">
+                                            <input type="hidden" name="action" value="save_contact">
                                             <div class="mb-3">
                                                 <label class="form-label">Adınız Soyadınız</label>
-                                                <input type="text" class="form-control" required>
+                                                <input type="text" name="name" class="form-control" required>
                                             </div>
                                             <div class="mb-3">
                                                 <label class="form-label">E-posta Adresiniz</label>
-                                                <input type="email" class="form-control" required>
+                                                <input type="email" name="email" class="form-control" required>
                                             </div>
                                             <div class="mb-3">
                                                 <label class="form-label">Konu</label>
-                                                <input type="text" class="form-control" required>
+                                                <input type="text" name="subject" class="form-control" required>
                                             </div>
                                             <div class="mb-3">
                                                 <label class="form-label">Mesajınız</label>
-                                                <textarea class="form-control" rows="4" required></textarea>
+                                                <textarea name="message" class="form-control" rows="4" required></textarea>
                                             </div>
                                             <button type="submit" class="btn btn-gradient w-100">Gönder</button>
                                         </form>
@@ -2232,7 +2343,7 @@ if (isset($_GET['logout'])) {
         <div class="container">
             <div class="row">
                 <div class="col-lg-4 mb-4">
-                    <h5 class="text-white mb-4"><?= SITE_TITLE ?></h5>
+                    <h5 class="text-white mb-4"><?= getSetting('site_title', SITE_TITLE) ?></h5>
                     <p class="text-muted">Kişisel web siteme hoş geldiniz. Benimle ilgili her şeyi burada bulabilirsiniz.</p>
                 </div>
                 <div class="col-lg-2 col-md-4 mb-4">
@@ -2246,43 +2357,47 @@ if (isset($_GET['logout'])) {
                     </ul>
                 </div>
                 <div class="col-lg-3 col-md-4 mb-4">
-                    <h5 class="text-white mb-4">Kategoriler</h5>
-                    <ul class="list-unstyled footer-links">
-                        <li><a href="#">Kişisel</a></li>
-                        <li><a href="#">Seyahat</a></li>
-                        <li><a href="#">Kitap & Film</a></li>
-                        <li><a href="#">Teknoloji</a></li>
-                    </ul>
+                    <h5 class="text-white mb-4">Sosyal Medya</h5>
+                    <div class="d-flex">
+                        <?php if (getSetting('facebook')): ?>
+                            <a href="<?= htmlspecialchars(getSetting('facebook')) ?>" class="social-link" target="_blank"><i class="fab fa-facebook-f"></i></a>
+                        <?php endif; ?>
+                        <?php if (getSetting('twitter')): ?>
+                            <a href="<?= htmlspecialchars(getSetting('twitter')) ?>" class="social-link" target="_blank"><i class="fab fa-twitter"></i></a>
+                        <?php endif; ?>
+                        <?php if (getSetting('instagram')): ?>
+                            <a href="<?= htmlspecialchars(getSetting('instagram')) ?>" class="social-link" target="_blank"><i class="fab fa-instagram"></i></a>
+                        <?php endif; ?>
+                        <?php if (getSetting('linkedin')): ?>
+                            <a href="<?= htmlspecialchars(getSetting('linkedin')) ?>" class="social-link" target="_blank"><i class="fab fa-linkedin-in"></i></a>
+                        <?php endif; ?>
+                        <?php if (getSetting('github')): ?>
+                            <a href="<?= htmlspecialchars(getSetting('github')) ?>" class="social-link" target="_blank"><i class="fab fa-github"></i></a>
+                        <?php endif; ?>
+                    </div>
                 </div>
                 <div class="col-lg-3 col-md-4">
                     <h5 class="text-white mb-4">İletişim</h5>
                     <ul class="list-unstyled">
                         <li class="mb-2 text-muted">
-                            <i class="fas fa-envelope me-2"></i> email@ornek.com
+                            <i class="fas fa-envelope me-2"></i> <?= htmlspecialchars(getSetting('email', 'info@muratcandas.com')) ?>
                         </li>
                         <li class="mb-2 text-muted">
-                            <i class="fas fa-phone me-2"></i> +90 555 123 4567
+                            <i class="fas fa-phone me-2"></i> <?= htmlspecialchars(getSetting('phone', '+90 555 123 4567')) ?>
                         </li>
                         <li class="mb-2 text-muted">
-                            <i class="fas fa-map-marker-alt me-2"></i> İstanbul, Türkiye
+                            <i class="fas fa-map-marker-alt me-2"></i> <?= htmlspecialchars(getSetting('address', 'İstanbul, Türkiye')) ?>
                         </li>
                     </ul>
                 </div>
             </div>
-            <hr class="bg-light mt-0 mb-4">
+            <hr class="bg-secondary mt-0 mb-4">
             <div class="row align-items-center">
                 <div class="col-md-6">
-                    <p class="mb-0 text-muted">&copy; <?= date('Y') ?> <?= SITE_TITLE ?>. Tüm hakları saklıdır.</p>
+                    <p class="mb-0 text-muted">&copy; <?= date('Y') ?> <?= getSetting('site_title', SITE_TITLE) ?>. Tüm hakları saklıdır.</p>
                 </div>
                 <div class="col-md-6 text-md-end">
-                    <div class="d-flex justify-content-md-end">
-                        <a href="#" class="social-link"><i class="fab fa-facebook-f"></i></a>
-                        <a href="#" class="social-link"><i class="fab fa-twitter"></i></a>
-
-
-                        <a href="#" class="social-link"><i class="fab fa-instagram"></i></a>
-                        <a href="#" class="social-link"><i class="fab fa-linkedin-in"></i></a>
-                    </div>
+                    <a href="?admin" class="text-muted">Yönetim Paneli</a>
                 </div>
             </div>
         </div>
@@ -2297,17 +2412,6 @@ if (isset($_GET['logout'])) {
         'resizeDuration': 200,
         'wrapAround': true,
         'showImageNumberLabel': true
-    });
-
-    // SSS accordion için
-    document.addEventListener('DOMContentLoaded', function() {
-        const faqQuestions = document.querySelectorAll('.faq-question');
-        faqQuestions.forEach(question => {
-            question.addEventListener('click', function() {
-                const answer = this.nextElementSibling;
-                answer.style.display = answer.style.display === 'none' ? 'block' : 'none';
-            });
-        });
     });
 </script>
 </body>
