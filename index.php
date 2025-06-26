@@ -157,6 +157,7 @@ function initializeDatabase() {
 
         // Site ayarlarını oluştur (yoksa)
         $settings = [
+            ['site_title', 'Murat Candaş Bozyiğit'],
             ['address', 'İstanbul, Türkiye'],
             ['email', 'info@muratcandas.com'],
             ['phone', '+90 555 123 4567'],
@@ -236,9 +237,9 @@ function handleAdminActions() {
     if (!$db) return false;
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-        // Null coalesce düzeltmeleri
+        // PHP 5.x uyumluluğu için isset kontrolü
         $action = isset($_POST['action']) ? $_POST['action'] : '';
-        $id = isset($_POST['id']) ? $_POST['id'] : 0;
+        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
         $content = isset($_POST['content']) ? $_POST['content'] : '';
         $title = isset($_POST['title']) ? $_POST['title'] : '';
         $category = isset($_POST['category']) ? $_POST['category'] : '';
@@ -309,14 +310,29 @@ function handleAdminActions() {
 
                 // Basit dosya yükleme
                 $image_path = isset($_POST['current_image']) ? $_POST['current_image'] : '';
+                $uploadSuccess = false;
+
                 if (!empty($_FILES['image']['name'])) {
                     $target_dir = "uploads/";
-                    if (!is_dir($target_dir)) {
-                        @mkdir($target_dir, 0777, true);
+
+                    // Klasör yoksa oluştur (recursive)
+                    if (!file_exists($target_dir)) {
+                        mkdir($target_dir, 0777, true);
                     }
-                    $target_file = $target_dir . basename($_FILES["image"]["name"]);
+
+                    // Benzersiz dosya adı oluştur
+                    $fileExtension = pathinfo($_FILES["image"]["name"], PATHINFO_EXTENSION);
+                    $uniqueFileName = uniqid() . '.' . $fileExtension;
+                    $target_file = $target_dir . $uniqueFileName;
+
                     if (move_uploaded_file($_FILES["image"]["tmp_name"], $target_file)) {
                         $image_path = $target_file;
+                        $uploadSuccess = true;
+                    } else {
+                        // Hata durumunda mevcut resmi koru
+                        if (empty($image_path)) {
+                            $image_path = "uploads/default.jpg";
+                        }
                     }
                 }
 
@@ -394,7 +410,7 @@ function handleAdminActions() {
 }
 
 /* ===== ROUTING SYSTEM ===== */
-// Null coalesce düzeltmeleri
+// PHP 5.x uyumluluğu için isset kontrolü
 $request = isset($_GET['page']) ? $_GET['page'] : 'home';
 $adminMode = isset($_GET['admin']);
 $action = isset($_GET['action']) ? $_GET['action'] : '';
@@ -417,7 +433,7 @@ if (isset($_GET['logout'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= SITE_TITLE ?></title>
+    <title><?= getSetting('site_title', SITE_TITLE) ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/css/lightbox.min.css">
@@ -440,13 +456,13 @@ if (isset($_GET['logout'])) {
         body {
             font-family: 'Nunito', sans-serif;
             background: var(--darker);
-            color: var(--text); /* Tüm metinler beyaz */
+            color: var(--text);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
         }
 
-        /* Diğer tüm elementler için beyaz metin */
+        /* Tüm metinler beyaz */
         .navbar, .card, .card-header, .card-body, .list-group-item,
         .accordion-button, .table, .alert, .form-label, .text-muted,
         .footer-links a, .contact-form .form-control, .btn-outline-light,
@@ -731,6 +747,72 @@ if (isset($_GET['logout'])) {
 
         .form-label {
             color: var(--text);
+        }
+
+        /* Yeni Tema Geliştirmeleri */
+        .hero-bg {
+            background: linear-gradient(135deg, var(--dark) 0%, var(--darker) 100%);
+            padding: 80px 0;
+            border-radius: 0 0 30px 30px;
+        }
+
+        .feature-card {
+            border-radius: 15px;
+            overflow: hidden;
+            transition: all 0.4s;
+            border: 1px solid rgba(78, 115, 223, 0.2);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.3);
+            border-color: var(--primary);
+        }
+
+        .profile-img {
+            border: 5px solid rgba(255,255,255,0.1);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            transition: all 0.4s;
+        }
+
+        .profile-img:hover {
+            transform: scale(1.03);
+            border-color: var(--primary);
+        }
+
+        .section-title {
+            position: relative;
+            display: inline-block;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+
+        .section-title:after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(to right, var(--primary), transparent);
+        }
+
+        .social-icon {
+            font-size: 24px;
+            margin: 0 10px;
+            transition: all 0.3s;
+        }
+
+        .social-icon:hover {
+            transform: translateY(-5px);
+            color: var(--primary);
+        }
+
+        .admin-tool {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 999;
         }
     </style>
 </head>
@@ -1440,13 +1522,12 @@ if (isset($_GET['logout'])) {
 
                                     <div class="mb-3">
                                         <label class="form-label">Resim</label>
-                                        <?php if ($item['image_path']): ?>
+                                        <?php if ($item['image_path'] && file_exists($item['image_path'])): ?>
                                             <div class="mb-2">
                                                 <img src="<?= $item['image_path'] ?>" class="img-thumbnail" style="max-height: 200px;">
                                             </div>
                                         <?php endif; ?>
                                         <input type="file" name="image" class="form-control">
-                                        <small class="text-muted">Dosya yolu: <?= $item['image_path'] ?></small>
                                     </div>
 
                                     <button type="submit" class="btn btn-success">
@@ -1475,7 +1556,6 @@ if (isset($_GET['logout'])) {
                                         <?php
                                         $db = getDB();
                                         if ($db) {
-                                            // HATA DÜZELTME: created_at -> id kullanıldı
                                             $faqs = $db->query("SELECT * FROM faqs ORDER BY id DESC");
                                             if ($faqs && $faqs->num_rows > 0) {
                                                 while ($faq = $faqs->fetch_assoc()):
@@ -1807,18 +1887,11 @@ if (isset($_GET['logout'])) {
         </div>
     </nav>
 
-    <main class="flex-grow-1 py-5">
-        <div class="container my-4">
-            <?php if (!$db_initialized): ?>
-                <div class="alert alert-danger">
-                    <h4 class="alert-heading">Veritabanı Bağlantı Hatası!</h4>
-                    <p>Veritabanı bağlantısı kurulamadı. Lütfen daha sonra tekrar deneyin veya site yöneticisi ile iletişime geçin.</p>
-                </div>
-            <?php endif; ?>
-
-            <?php if ($request === 'home'): ?>
-                <!-- HOME PAGE CONTENT -->
-                <section class="hero-section mb-5">
+    <main class="flex-grow-1">
+        <?php if ($request === 'home'): ?>
+            <!-- HOME PAGE CONTENT -->
+            <section class="hero-bg">
+                <div class="container py-5">
                     <div class="row align-items-center">
                         <div class="col-lg-6">
                             <h1 class="display-4 fw-bold mb-4">Murat Candaş Bozyiğit</h1>
@@ -1830,14 +1903,16 @@ if (isset($_GET['logout'])) {
                         </div>
                         <div class="col-lg-6 text-center">
                             <div class="position-relative">
-                                <img src="https://images.unsplash.com/photo-1534665482403-a909d0d97c67?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" class="img-fluid rounded-circle shadow-lg" alt="Profil Resmi">
+                                <img src="https://images.unsplash.com/photo-1534665482403-a909d0d97c67?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" class="img-fluid rounded-circle shadow-lg profile-img" alt="Profil Resmi">
                                 <span class="admin-badge"><?= date('Y') ?></span>
                             </div>
                         </div>
                     </div>
-                </section>
+                </div>
+            </section>
 
-                <section class="features-section mb-5">
+            <section class="py-5">
+                <div class="container">
                     <div class="row text-center mb-5">
                         <div class="col-12">
                             <h2 class="section-header">Neler Yapıyorum?</h2>
@@ -1846,7 +1921,7 @@ if (isset($_GET['logout'])) {
                     </div>
                     <div class="row">
                         <div class="col-md-4 mb-4">
-                            <div class="card h-100">
+                            <div class="card feature-card h-100">
                                 <div class="card-body p-4">
                                     <div class="feature-icon mx-auto">
                                         <i class="fas fa-laptop-code"></i>
@@ -1857,7 +1932,7 @@ if (isset($_GET['logout'])) {
                             </div>
                         </div>
                         <div class="col-md-4 mb-4">
-                            <div class="card h-100">
+                            <div class="card feature-card h-100">
                                 <div class="card-body p-4">
                                     <div class="feature-icon mx-auto">
                                         <i class="fas fa-mobile-alt"></i>
@@ -1868,7 +1943,7 @@ if (isset($_GET['logout'])) {
                             </div>
                         </div>
                         <div class="col-md-4 mb-4">
-                            <div class="card h-100">
+                            <div class="card feature-card h-100">
                                 <div class="card-body p-4">
                                     <div class="feature-icon mx-auto">
                                         <i class="fas fa-paint-brush"></i>
@@ -1879,88 +1954,94 @@ if (isset($_GET['logout'])) {
                             </div>
                         </div>
                     </div>
-                </section>
+                </div>
+            </section>
 
-                <section class="row mb-5">
-                    <div class="col-md-6 mb-4">
-                        <div class="card h-100">
-                            <div class="card-body">
-                                <h3 class="card-title">Ben Kimim?</h3>
-                                <?php if ($db_initialized): ?>
-                                    <?php
-                                    $db = getDB();
-                                    $about = $db ? $db->query("SELECT * FROM about_sections WHERE section_type = 'bio'") : false;
-                                    if ($about && $about->num_rows > 0) {
-                                        $bio = $about->fetch_assoc();
-                                        echo '<p>' . mb_substr(strip_tags($bio['content']), 0, 200) . '...</p>';
-                                    } else {
-                                        echo '<div class="empty-state">
-                                                <i class="fas fa-user-circle"></i>
-                                                <h3>Henüz biyografi eklenmemiş</h3>
-                                                <p>Yönetici panelinden biyografi bilgilerinizi ekleyebilirsiniz.</p>
-                                            </div>';
-                                    }
-                                    ?>
-                                    <a href="?page=about_bio" class="btn btn-outline-primary">Devamını Oku</a>
-                                <?php else: ?>
-                                    <div class="empty-state">
-                                        <i class="fas fa-database"></i>
-                                        <h3>Veriye ulaşılamıyor</h3>
-                                        <p>Veritabanı bağlantısı olmadığı için içerik gösterilemiyor.</p>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-md-6 mb-4">
-                        <div class="card h-100">
-                            <div class="card-body">
-                                <h3 class="card-title">Son Blog Yazılarım</h3>
-                                <?php if ($db_initialized): ?>
-                                    <ul class="list-group list-group-flush">
+            <section class="py-5 bg-dark">
+                <div class="container">
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <h3 class="card-title">Ben Kimim?</h3>
+                                    <?php if ($db_initialized): ?>
                                         <?php
                                         $db = getDB();
-                                        if ($db) {
-                                            $recentPosts = $db->query("SELECT * FROM blog_posts ORDER BY created_at DESC LIMIT 3");
-                                            if ($recentPosts && $recentPosts->num_rows > 0) {
-                                                while ($post = $recentPosts->fetch_assoc()):
-                                                    ?>
-                                                    <li class="list-group-item">
-                                                        <a href="?page=blog_post&id=<?= $post['id'] ?>" class="text-decoration-none">
-                                                            <div class="d-flex justify-content-between">
-                                                                <h6 class="mb-1"><?= htmlspecialchars($post['title']) ?></h6>
-                                                                <small class="text-muted"><?= date('d.m.Y', strtotime($post['created_at'])) ?></small>
-                                                            </div>
-                                                            <small class="text-muted"><?= $post['category'] ?></small>
-                                                        </a>
-                                                    </li>
-                                                <?php endwhile;
-                                            } else {
-                                                echo '<li class="list-group-item text-center py-4 text-muted">Henüz blog yazısı eklenmemiş</li>';
-                                            }
+                                        $about = $db ? $db->query("SELECT * FROM about_sections WHERE section_type = 'bio'") : false;
+                                        if ($about && $about->num_rows > 0) {
+                                            $bio = $about->fetch_assoc();
+                                            echo '<p>' . mb_substr(strip_tags($bio['content']), 0, 200) . '...</p>';
                                         } else {
-                                            echo '<li class="list-group-item">Veritabanı bağlantı hatası</li>';
+                                            echo '<div class="empty-state">
+                                                    <i class="fas fa-user-circle"></i>
+                                                    <h3>Henüz biyografi eklenmemiş</h3>
+                                                    <p>Yönetici panelinden biyografi bilgilerinizi ekleyebilirsiniz.</p>
+                                                </div>';
                                         }
                                         ?>
-                                    </ul>
-                                    <div class="mt-3 text-center">
-                                        <a href="?page=blog" class="btn btn-outline-primary">Tüm Yazıları Gör</a>
-                                    </div>
-                                <?php else: ?>
-                                    <div class="empty-state">
-                                        <i class="fas fa-database"></i>
-                                        <h3>Veriye ulaşılamıyor</h3>
-                                        <p>Veritabanı bağlantısı olmadığı için içerik gösterilemiyor.</p>
-                                    </div>
-                                <?php endif; ?>
+                                        <a href="?page=about_bio" class="btn btn-outline-primary">Devamını Oku</a>
+                                    <?php else: ?>
+                                        <div class="empty-state">
+                                            <i class="fas fa-database"></i>
+                                            <h3>Veriye ulaşılamıyor</h3>
+                                            <p>Veritabanı bağlantısı olmadığı için içerik gösterilemiyor.</p>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <h3 class="card-title">Son Blog Yazılarım</h3>
+                                    <?php if ($db_initialized): ?>
+                                        <ul class="list-group list-group-flush">
+                                            <?php
+                                            $db = getDB();
+                                            if ($db) {
+                                                $recentPosts = $db->query("SELECT * FROM blog_posts ORDER BY created_at DESC LIMIT 3");
+                                                if ($recentPosts && $recentPosts->num_rows > 0) {
+                                                    while ($post = $recentPosts->fetch_assoc()):
+                                                        ?>
+                                                        <li class="list-group-item">
+                                                            <a href="?page=blog_post&id=<?= $post['id'] ?>" class="text-decoration-none">
+                                                                <div class="d-flex justify-content-between">
+                                                                    <h6 class="mb-1"><?= htmlspecialchars($post['title']) ?></h6>
+                                                                    <small class="text-muted"><?= date('d.m.Y', strtotime($post['created_at'])) ?></small>
+                                                                </div>
+                                                                <small class="text-muted"><?= $post['category'] ?></small>
+                                                            </a>
+                                                        </li>
+                                                    <?php endwhile;
+                                                } else {
+                                                    echo '<li class="list-group-item text-center py-4 text-muted">Henüz blog yazısı eklenmemiş</li>';
+                                                }
+                                            } else {
+                                                echo '<li class="list-group-item">Veritabanı bağlantı hatası</li>';
+                                            }
+                                            ?>
+                                        </ul>
+                                        <div class="mt-3 text-center">
+                                            <a href="?page=blog" class="btn btn-outline-primary">Tüm Yazıları Gör</a>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="empty-state">
+                                            <i class="fas fa-database"></i>
+                                            <h3>Veriye ulaşılamıyor</h3>
+                                            <p>Veritabanı bağlantısı olmadığı için içerik gösterilemiyor.</p>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </section>
+                </div>
+            </section>
 
-            <?php elseif ($request === 'about_bio'): ?>
-                <!-- BIOGRAPHY PAGE -->
+        <?php elseif ($request === 'about_bio'): ?>
+            <!-- BIOGRAPHY PAGE -->
+            <div class="container py-5">
                 <div class="row">
                     <div class="col-lg-8 mx-auto">
                         <div class="card">
@@ -1994,9 +2075,125 @@ if (isset($_GET['logout'])) {
                         </div>
                     </div>
                 </div>
+            </div>
 
-            <?php elseif ($request === 'blog'): ?>
-                <!-- BLOG PAGE -->
+        <?php elseif ($request === 'about_interests'): ?>
+            <!-- INTERESTS PAGE -->
+            <div class="container py-5">
+                <div class="row">
+                    <div class="col-lg-8 mx-auto">
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="mb-0">İlgi Alanlarım</h2>
+                            </div>
+                            <div class="card-body">
+                                <?php if ($db_initialized): ?>
+                                    <?php
+                                    $db = getDB();
+                                    $about = $db ? $db->query("SELECT * FROM about_sections WHERE section_type = 'interests'") : false;
+                                    if ($about && $about->num_rows > 0) {
+                                        $interests = $about->fetch_assoc();
+                                        echo $interests['content'];
+                                    } else {
+                                        echo '<div class="empty-state">
+                                                <i class="fas fa-heart"></i>
+                                                <h3>Henüz ilgi alanları eklenmemiş</h3>
+                                                <p>Yönetici panelinden ilgi alanlarınızı ekleyebilirsiniz.</p>
+                                            </div>';
+                                    }
+                                    ?>
+                                <?php else: ?>
+                                    <div class="empty-state">
+                                        <i class="fas fa-database"></i>
+                                        <h3>Veriye ulaşılamıyor</h3>
+                                        <p>Veritabanı bağlantısı olmadığı için içerik gösterilemiyor.</p>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        <?php elseif ($request === 'about_education'): ?>
+            <!-- EDUCATION PAGE -->
+            <div class="container py-5">
+                <div class="row">
+                    <div class="col-lg-8 mx-auto">
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="mb-0">Eğitim & Deneyim</h2>
+                            </div>
+                            <div class="card-body">
+                                <?php if ($db_initialized): ?>
+                                    <?php
+                                    $db = getDB();
+                                    $about = $db ? $db->query("SELECT * FROM about_sections WHERE section_type = 'education'") : false;
+                                    if ($about && $about->num_rows > 0) {
+                                        $education = $about->fetch_assoc();
+                                        echo $education['content'];
+                                    } else {
+                                        echo '<div class="empty-state">
+                                                <i class="fas fa-graduation-cap"></i>
+                                                <h3>Henüz eğitim bilgileri eklenmemiş</h3>
+                                                <p>Yönetici panelinden eğitim bilgilerinizi ekleyebilirsiniz.</p>
+                                            </div>';
+                                    }
+                                    ?>
+                                <?php else: ?>
+                                    <div class="empty-state">
+                                        <i class="fas fa-database"></i>
+                                        <h3>Veriye ulaşılamıyor</h3>
+                                        <p>Veritabanı bağlantısı olmadığı için içerik gösterilemiyor.</p>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        <?php elseif ($request === 'about_certificates'): ?>
+            <!-- CERTIFICATES PAGE -->
+            <div class="container py-5">
+                <div class="row">
+                    <div class="col-lg-8 mx-auto">
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="mb-0">Sertifikalar</h2>
+                            </div>
+                            <div class="card-body">
+                                <?php if ($db_initialized): ?>
+                                    <?php
+                                    $db = getDB();
+                                    $about = $db ? $db->query("SELECT * FROM about_sections WHERE section_type = 'certificates'") : false;
+                                    if ($about && $about->num_rows > 0) {
+                                        $certificates = $about->fetch_assoc();
+                                        echo $certificates['content'];
+                                    } else {
+                                        echo '<div class="empty-state">
+                                                <i class="fas fa-award"></i>
+                                                <h3>Henüz sertifika eklenmemiş</h3>
+                                                <p>Yönetici panelinden sertifikalarınızı ekleyebilirsiniz.</p>
+                                            </div>';
+                                    }
+                                    ?>
+                                <?php else: ?>
+                                    <div class="empty-state">
+                                        <i class="fas fa-database"></i>
+                                        <h3>Veriye ulaşılamıyor</h3>
+                                        <p>Veritabanı bağlantısı olmadığı için içerik gösterilemiyor.</p>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        <?php elseif ($request === 'blog'): ?>
+            <!-- BLOG PAGE -->
+            <div class="container py-5">
                 <div class="row">
                     <div class="col-12 mb-4">
                         <div class="card">
@@ -2057,27 +2254,29 @@ if (isset($_GET['logout'])) {
                         <?php endif; ?>
                     </div>
                 </div>
+            </div>
 
-            <?php elseif ($request === 'blog_post'): ?>
-                <!-- BLOG POST DETAIL -->
-                <?php
-                $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-                $post = ['id' => 0, 'title' => '', 'content' => '', 'category' => '', 'created_at' => ''];
+        <?php elseif ($request === 'blog_post'): ?>
+            <!-- BLOG POST DETAIL -->
+            <?php
+            $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+            $post = ['id' => 0, 'title' => '', 'content' => '', 'category' => '', 'created_at' => ''];
 
-                if ($id > 0 && $db_initialized) {
-                    $db = getDB();
-                    if ($db) {
-                        $stmt = $db->prepare("SELECT * FROM blog_posts WHERE id = ?");
-                        $stmt->bind_param("i", $id);
-                        $stmt->execute();
-                        $result = $stmt->get_result();
-                        if ($result->num_rows > 0) {
-                            $post = $result->fetch_assoc();
-                        }
+            if ($id > 0 && $db_initialized) {
+                $db = getDB();
+                if ($db) {
+                    $stmt = $db->prepare("SELECT * FROM blog_posts WHERE id = ?");
+                    $stmt->bind_param("i", $id);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    if ($result->num_rows > 0) {
+                        $post = $result->fetch_assoc();
                     }
                 }
-                ?>
+            }
+            ?>
 
+            <div class="container py-5">
                 <?php if ($post['id']): ?>
                     <div class="row">
                         <div class="col-lg-8 mx-auto">
@@ -2112,9 +2311,11 @@ if (isset($_GET['logout'])) {
                         </div>
                     </div>
                 <?php endif; ?>
+            </div>
 
-            <?php elseif ($request === 'gallery'): ?>
-                <!-- GALLERY PAGE -->
+        <?php elseif ($request === 'gallery'): ?>
+            <!-- GALLERY PAGE -->
+            <div class="container py-5">
                 <div class="row">
                     <div class="col-12 mb-4">
                         <div class="card">
@@ -2130,6 +2331,7 @@ if (isset($_GET['logout'])) {
                         if ($db) {
                             $galleryItems = $db->query("SELECT * FROM gallery_items ORDER BY id DESC");
                             if ($galleryItems && $galleryItems->num_rows > 0) {
+                                echo '<div class="row">';
                                 while ($item = $galleryItems->fetch_assoc()):
                                     ?>
                                     <div class="col-md-4 mb-4">
@@ -2144,6 +2346,7 @@ if (isset($_GET['logout'])) {
                                         </div>
                                     </div>
                                 <?php endwhile;
+                                echo '</div>';
                             } else {
                                 echo '<div class="col-12">
                                         <div class="card">
@@ -2166,9 +2369,11 @@ if (isset($_GET['logout'])) {
                         </div>
                     <?php endif; ?>
                 </div>
+            </div>
 
-            <?php elseif ($request === 'faq'): ?>
-                <!-- FAQ PAGE -->
+        <?php elseif ($request === 'faq'): ?>
+            <!-- FAQ PAGE -->
+            <div class="container py-5">
                 <div class="row">
                     <div class="col-lg-8 mx-auto">
                         <div class="card">
@@ -2181,7 +2386,6 @@ if (isset($_GET['logout'])) {
                                         <?php
                                         $db = getDB();
                                         if ($db) {
-                                            // HATA DÜZELTME: created_at -> id kullanıldı
                                             $faqs = $db->query("SELECT * FROM faqs ORDER BY id DESC");
                                             if ($faqs && $faqs->num_rows > 0) {
                                                 $count = 0;
@@ -2221,9 +2425,11 @@ if (isset($_GET['logout'])) {
                         </div>
                     </div>
                 </div>
+            </div>
 
-            <?php elseif ($request === 'contact'): ?>
-                <!-- CONTACT PAGE -->
+        <?php elseif ($request === 'contact'): ?>
+            <!-- CONTACT PAGE -->
+            <div class="container py-5">
                 <div class="row">
                     <div class="col-lg-8 mx-auto">
                         <div class="card">
@@ -2305,9 +2511,11 @@ if (isset($_GET['logout'])) {
                         </div>
                     </div>
                 </div>
+            </div>
 
-            <?php else: ?>
-                <!-- DYNAMIC PAGE CONTENT -->
+        <?php else: ?>
+            <!-- DYNAMIC PAGE CONTENT -->
+            <div class="container py-5">
                 <div class="row">
                     <div class="col-12">
                         <div class="card">
@@ -2348,8 +2556,8 @@ if (isset($_GET['logout'])) {
                         </div>
                     </div>
                 </div>
-            <?php endif; ?>
-        </div>
+            </div>
+        <?php endif; ?>
     </main>
 
     <footer class="py-5">
