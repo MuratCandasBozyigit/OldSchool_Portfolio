@@ -9,8 +9,8 @@ session_start();
 
 /* ===== DATABASE CONFIGURATION ===== */
 
-define('DB_HOST', '217.195.207.215');
-//define('DB_HOST', 'localhost');
+//define('DB_HOST', '217.195.207.215');
+define('DB_HOST', 'localhost');
 define('DB_PORT', '3306');
 define('DB_USER', 'murat');
 define('DB_PASS', '81644936.Ma');
@@ -2307,13 +2307,13 @@ if (!empty($_SESSION['swal_messages'])) {
                                                value="<?= htmlspecialchars(getSetting('github', 'https://github.com/muratcandas')) ?>">
                                     </div>
 
-                                    <div class="mb-3">
-                                        <label class="form-label">Tema</label>
-                                        <select name="settings[theme]" class="form-select">
-                                            <option value="dark" <?= getSetting('theme') === 'dark' ? 'selected' : '' ?>>Koyu Tema</option>
-                                            <option value="light" <?= getSetting('theme') === 'light' ? 'selected' : '' ?>>Açık Tema</option>
-                                        </select>
-                                    </div>
+<!--                                    <div class="mb-3">-->
+<!--                                        <label class="form-label">Tema</label>-->
+<!--                                        <select name="settings[theme]" class="form-select">-->
+<!--                                            <option value="dark" --><?php //= getSetting('theme') === 'dark' ? 'selected' : '' ?><!-->Koyu Tema</option>-->
+<!--                                            <option value="light" --><?php //= getSetting('theme') === 'light' ? 'selected' : '' ?><!-->Açık Tema</option>-->
+<!--                                        </select>-->
+<!--                                    </div>-->
 
                                     <button type="submit" class="btn btn-success">
                                         <i class="fas fa-save me-2"></i> Ayarları Kaydet
@@ -2388,18 +2388,32 @@ if (!empty($_SESSION['swal_messages'])) {
                     <div class="row align-items-center">
                         <div class="col-lg-6">
                             <h1 class="display-4 fw-bold mb-4">Murat Candaş Bozyiğit</h1>
-                            <p class="lead mb-4">Kişisel web siteme hoş geldiniz. Burada benimle ilgili her şeyi bulabilir, ilgi alanlarımı keşfedebilir ve blog yazılarımla bilgi edinebilirsiniz.</p>
+                            <p class="lead mb-4">2023'ten bu zamana kadar. Asp.Net Core -.Net ile web siteleri geliştiriyorum Python ile ise windows macos ve linux uyumlu uygulamalar geliştiriyorum trade botları vesaire.</p>
                             <div class="d-flex">
                                 <a href="?page=about_bio" class="btn-gradient me-3">Beni Tanıyın</a>
                                 <a href="?page=blog" class="btn btn-outline-primary">Blog Yazılarım</a>
                             </div>
+
+                            <div style="margin-top: 25px; padding-top: 25px; border-top: 1px solid rgba(255, 255, 255, 0.2);">
+                                <p style="font-weight: 600; margin-bottom: 15px; font-size: 1.1rem;">Örnek Sitelerim...</p>
+                                <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                                    <a href="https://www.botanikbambu.com" target="_blank" style="border: 2px solid #ffc107; color: #ffc107; background: transparent; padding: 10px 20px; border-radius: 30px; font-weight: 600; transition: all 0.3s ease; text-decoration: none;">Botanikbambu.com</a>
+                                    <a href="https://www.bytewavehq.com" target="_blank" style="border: 2px solid #ffc107; color: #ffc107; background: transparent; padding: 10px 20px; border-radius: 30px; font-weight: 600; transition: all 0.3s ease; text-decoration: none;">BytewaveHQ.com</a>
+                                </div>
+                            </div>
                         </div>
+
                         <div class="col-lg-6 text-center">
                             <div class="position-relative">
-                                <img src="https://images.unsplash.com/photo-1534665482403-a909d0d97c67?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" class="img-fluid rounded-circle shadow-lg profile-img" alt="Profil Resmi">
+                                <img src="
+                                https://plus.unsplash.com/premium_photo-1673688152102-b24caa6e8725?q=80&w=3432&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+                                     class="img-fluid rounded-circle shadow-lg profile-img" alt="Profil Resmi">
                                 <span class="admin-badge"><?= date('Y') ?></span>
                             </div>
                         </div>
+
+
+
                     </div>
                 </div>
             </section>
@@ -3082,7 +3096,7 @@ if (!empty($_SESSION['swal_messages'])) {
             <div class="row">
                 <div class="col-lg-4 mb-4">
                     <h5 class="text-white mb-4"><?= getSetting('site_title', SITE_TITLE) ?></h5>
-                    <p class="text-muted">Kişisel web siteme hoş geldiniz. Benimle ilgili her şeyi burada bulabilirsiniz.</p>
+                    <p class="text-muted">2023’ten bu yana, ASP.NET Core ve .NET teknolojilerini kullanarak web siteleri geliştiriyorum. Ayrıca Python ile Windows, macOS ve Linux uyumlu uygulamalar, trade botları ve çeşitli otomasyon çözümleri geliştiriyorum.</p>
                 </div>
                 <div class="col-lg-2 col-md-4 mb-4">
                     <h5 class="text-white mb-4">Hızlı Linkler</h5>
@@ -3134,9 +3148,7 @@ if (!empty($_SESSION['swal_messages'])) {
                 <div class="col-md-6">
                     <p class="mb-0 text-muted">&copy; <?= date('Y') ?> <?= getSetting('site_title', SITE_TITLE) ?>. Tüm hakları saklıdır.</p>
                 </div>
-                <div class="col-md-6 text-md-end">
-                    <a href="?admin" class="text-muted">Yönetim Paneli</a>
-                </div>
+
             </div>
         </div>
     </footer>
