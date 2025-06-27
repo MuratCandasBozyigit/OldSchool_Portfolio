@@ -68,7 +68,8 @@ function initializeDatabase() {
             "CREATE TABLE IF NOT EXISTS gallery_items (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 title VARCHAR(255) NOT NULL,
-                image_path VARCHAR(255) NOT NULL,
+                file_path VARCHAR(255) NOT NULL,
+                file_type ENUM('image', 'video', 'pdf') NOT NULL,
                 category ENUM('Fotoğraflar', 'Hobiler', 'Videolar') NOT NULL,
                 description TEXT
             )",
@@ -237,26 +238,25 @@ function handleAdminActions() {
     if (!$db) return false;
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-        // PHP 5.x uyumluluğu için isset kontrolü
-        $action = isset($_POST['action']) ? $_POST['action'] : '';
+        $action = $_POST['action'] ?? '';
         $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
-        $content = isset($_POST['content']) ? $_POST['content'] : '';
-        $title = isset($_POST['title']) ? $_POST['title'] : '';
-        $category = isset($_POST['category']) ? $_POST['category'] : '';
-        $description = isset($_POST['description']) ? $_POST['description'] : '';
-        $question = isset($_POST['question']) ? $_POST['question'] : '';
-        $answer = isset($_POST['answer']) ? $_POST['answer'] : '';
-        $name = isset($_POST['name']) ? $_POST['name'] : '';
-        $email = isset($_POST['email']) ? $_POST['email'] : '';
-        $subject = isset($_POST['subject']) ? $_POST['subject'] : '';
-        $message = isset($_POST['message']) ? $_POST['message'] : '';
-        $setting_key = isset($_POST['setting_key']) ? $_POST['setting_key'] : '';
-        $setting_value = isset($_POST['setting_value']) ? $_POST['setting_value'] : '';
+        $content = $_POST['content'] ?? '';
+        $title = $_POST['title'] ?? '';
+        $category = $_POST['category'] ?? '';
+        $description = $_POST['description'] ?? '';
+        $question = $_POST['question'] ?? '';
+        $answer = $_POST['answer'] ?? '';
+        $name = $_POST['name'] ?? '';
+        $email = $_POST['email'] ?? '';
+        $subject = $_POST['subject'] ?? '';
+        $message = $_POST['message'] ?? '';
+        $setting_key = $_POST['setting_key'] ?? '';
+        $setting_value = $_POST['setting_value'] ?? '';
 
         switch ($action) {
             case 'login':
-                $username = isset($_POST['username']) ? $_POST['username'] : '';
-                $password = isset($_POST['password']) ? $_POST['password'] : '';
+                $username = $_POST['username'] ?? '';
+                $password = $_POST['password'] ?? '';
 
                 $stmt = $db->prepare("SELECT id, password FROM users WHERE username = ?");
                 $stmt->bind_param("s", $username);
@@ -274,8 +274,8 @@ function handleAdminActions() {
 
             case 'save_page':
                 $id = intval($id);
-                $content = isset($_POST['content']) ? $_POST['content'] : '';
-                $title = isset($_POST['title']) ? $_POST['title'] : '';
+                $content = $_POST['content'] ?? '';
+                $title = $_POST['title'] ?? '';
 
                 $stmt = $db->prepare("UPDATE pages SET title = ?, content = ? WHERE id = ?");
                 $stmt->bind_param("ssi", $title, $content, $id);
@@ -283,9 +283,9 @@ function handleAdminActions() {
 
             case 'save_blog':
                 $id = intval($id);
-                $title = isset($_POST['title']) ? $_POST['title'] : '';
-                $content = isset($_POST['content']) ? $_POST['content'] : '';
-                $category = isset($_POST['category']) ? $_POST['category'] : '';
+                $title = $_POST['title'] ?? '';
+                $content = $_POST['content'] ?? '';
+                $category = $_POST['category'] ?? '';
 
                 if ($id > 0) {
                     $stmt = $db->prepare("UPDATE blog_posts SET title = ?, content = ?, category = ? WHERE id = ?");
@@ -303,65 +303,151 @@ function handleAdminActions() {
                 return $stmt->execute();
 
             case 'save_gallery':
-                $id = intval($id);
-                $title = isset($_POST['title']) ? $_POST['title'] : '';
-                $category = isset($_POST['category']) ? $_POST['category'] : '';
-                $description = isset($_POST['description']) ? $_POST['description'] : '';
+                header('Content-Type: application/json');
+                $response = ['success' => false, 'message' => ''];
 
-                // Basit dosya yükleme
-                $image_path = isset($_POST['current_image']) ? $_POST['current_image'] : '';
-                $uploadSuccess = false;
+                try {
+                    // ID ve form verilerini alma
+                    $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+                    $title = isset($_POST['title']) ? htmlspecialchars($_POST['title']) : '';
+                    $category = isset($_POST['category']) ? htmlspecialchars($_POST['category']) : '';
+                    $description = isset($_POST['description']) ? htmlspecialchars($_POST['description']) : '';
+                    $current_file = isset($_POST['current_file']) ? htmlspecialchars($_POST['current_file']) : '';
 
-                if (!empty($_FILES['image']['name'])) {
-                    $target_dir = "uploads/";
+                    // Zorunlu alan kontrolü
+                    if (empty($title)) {
+                        throw new Exception("Başlık alanı zorunludur!");
+                    }
 
-                    // Klasör yoksa oluştur (recursive) - FIXED
-                    if (!file_exists($target_dir)) {
-                        if (!mkdir($target_dir, 0777, true)) {
-                            die("Uploads klasörü oluşturulamadı!");
+                    // Dosya yükleme işlemleri
+                    $file_path = $current_file;
+                    $file_type = 'image';
+                    $newFileUploaded = false;
+
+                    if (!empty($_FILES['file']['name'])) {
+                        $target_dir = "uploads/";
+
+                        // Klasör kontrolü ve oluşturma
+                        if (!is_dir($target_dir)) {
+                            if (!mkdir($target_dir, 0777, true)) {
+                                throw new Exception("Klasör oluşturulamadı: $target_dir. Yazma izinlerini kontrol edin.");
+                            }
+                        }
+
+                        // Dosya bilgileri
+                        $original_name = basename($_FILES['file']['name']);
+                        $file_extension = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
+
+                        // Tüm izin verilen dosya türleri (görsel, video, pdf)
+                        $allowed_types = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mov', 'avi', 'pdf'];
+
+                        // Dosya türünü belirle
+                        if (in_array($file_extension, ['mp4', 'mov', 'avi'])) {
+                            $file_type = 'video';
+                        } elseif ($file_extension === 'pdf') {
+                            $file_type = 'pdf';
+                        } else {
+                            $file_type = 'image';
+                        }
+
+                        // Güvenlik kontrolleri
+                        if (!in_array($file_extension, $allowed_types)) {
+                            throw new Exception("Geçersiz dosya formatı! Desteklenen formatlar: JPG, JPEG, PNG, GIF, WEBP, MP4, MOV, AVI, PDF");
+                        }
+
+                        // Dosya boyutu kontrolü (max 200MB)
+                        $maxFileSize = 200 * 1024 * 1024; // 200MB
+                        if ($_FILES['file']['size'] > $maxFileSize) {
+                            throw new Exception("Dosya boyutu çok büyük! Maksimum 200MB yükleyebilirsiniz.");
+                        }
+
+                        // MIME tipi kontrolü (sadece geçerli dosyalar için)
+                        if (!empty($_FILES['file']['tmp_name']) && file_exists($_FILES['file']['tmp_name'])) {
+                            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                            $mime_type = finfo_file($finfo, $_FILES['file']['tmp_name']);
+                            finfo_close($finfo);
+
+                            $allowed_mimes = [
+                                'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+                                'video/mp4', 'video/quicktime', 'video/x-msvideo',
+                                'application/pdf'
+                            ];
+                            if (!in_array($mime_type, $allowed_mimes)) {
+                                throw new Exception("Geçersiz dosya türü! Sistem MIME tipi: $mime_type");
+                            }
+                        }
+
+                        // Benzersiz dosya adı oluşturma
+                        $unique_name = uniqid('file_', true) . '.' . $file_extension;
+                        $target_path = $target_dir . $unique_name;
+
+                        // Dosya taşıma
+                        if (move_uploaded_file($_FILES['file']['tmp_name'], $target_path)) {
+                            $file_path = $target_path;
+                            $newFileUploaded = true;
+                        } else {
+                            // Hata koduna göre özel mesaj
+                            $error_code = $_FILES['file']['error'];
+                            $error_messages = [
+                                0 => 'Başarılı',
+                                1 => 'Dosya boyutu php.ini limitini aşıyor',
+                                2 => 'Dosya boyutu form limitini aşıyor',
+                                3 => 'Dosya kısmen yüklendi',
+                                4 => 'Dosya yüklenmedi',
+                                6 => 'Geçici klasör bulunamadı',
+                                7 => 'Dosya diske yazılamadı',
+                                8 => 'Bir PHP eklentisi dosya yüklemeyi durdurdu'
+                            ];
+
+                            $error_msg = $error_messages[$error_code] ?? "Bilinmeyen hata kodu: $error_code";
+                            throw new Exception("Dosya yükleme hatası: $error_msg");
                         }
                     }
 
-                    // Dosya adı ve uzantı işleme - FIXED
-                    $originalName = $_FILES["image"]["name"];
-                    $fileExtension = pathinfo($originalName, PATHINFO_EXTENSION);
-                    $uniqueFileName = uniqid() . '.' . $fileExtension;
-                    $target_file = $target_dir . $uniqueFileName;
-
-                    // Dosya tipi kontrolü - ENHANCED
-                    $allowedTypes = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-                    if (!in_array(strtolower($fileExtension), $allowedTypes)) {
-                        die("Geçersiz dosya formatı! Sadece JPG, JPEG, PNG, GIF veya WEBP yükleyebilirsiniz.");
-                    }
-
-                    if (move_uploaded_file($_FILES["image"]["tmp_name"], $target_file)) {
-                        $image_path = $target_file; // Doğru yolu kullan
-                        $uploadSuccess = true;
-
-                        // Eski resmi sil (güncelleme yapılıyorsa)
-                        if ($id > 0 && !empty($_POST['current_image']) && file_exists($_POST['current_image'])) {
-                            @unlink($_POST['current_image']);
-                        }
+                    // Veritabanı işlemleri
+                    if ($id > 0) {
+                        // GÜNCELLEME
+                        $stmt = $db->prepare("UPDATE gallery_items SET 
+                            title = ?,
+                            file_path = ?,
+                            file_type = ?,
+                            category = ?,
+                            description = ?
+                            WHERE id = ?");
+                        $stmt->bind_param("sssssi", $title, $file_path, $file_type, $category, $description, $id);
                     } else {
-                        // Hata durumunda mevcut resmi koru
-                        if (empty($image_path)) {
-                            $image_path = "uploads/default.jpg";
-                        }
-                        // Hata mesajı - DEBUG
-                        error_log("Resim yükleme hatası: " . $_FILES['image']['error']);
+                        // EKLEME
+                        $stmt = $db->prepare("INSERT INTO gallery_items 
+                            (title, file_path, file_type, category, description) 
+                            VALUES (?, ?, ?, ?, ?)");
+                        $stmt->bind_param("sssss", $title, $file_path, $file_type, $category, $description);
                     }
+
+                    // Sorguyu çalıştır
+                    if ($stmt->execute()) {
+                        // Eski dosyayı silme (güncelleme ve yeni dosya yüklendiyse)
+                        if ($id > 0 && $newFileUploaded && !empty($current_file) && file_exists($current_file)) {
+                            @unlink($current_file);
+                        }
+
+                        $response['success'] = true;
+                        $response['message'] = $id > 0
+                            ? "Kayıt başarıyla güncellendi!"
+                            : "Yeni kayıt eklendi!";
+                    } else {
+                        throw new Exception("Database hatası: " . $stmt->error);
+                    }
+                } catch (Exception $e) {
+                    // Hata durumunda yeni yüklenen dosyayı sil
+                    if (isset($target_path) && file_exists($target_path)) {
+                        @unlink($target_path);
+                    }
+                    $response['message'] = "Hata: " . $e->getMessage();
                 }
 
-                // Veritabanı işlemleri
-                if ($id > 0) {
-                    $stmt = $db->prepare("UPDATE gallery_items SET title = ?, image_path = ?, category = ?, description = ? WHERE id = ?");
-                    $stmt->bind_param("ssssi", $title, $image_path, $category, $description, $id);
-                } else {
-                    $stmt = $db->prepare("INSERT INTO gallery_items (title, image_path, category, description) VALUES (?, ?, ?, ?)");
-                    $stmt->bind_param("ssss", $title, $image_path, $category, $description);
-                }
+                echo json_encode($response);
+                exit;
 
-                return $stmt->execute();
             case 'delete_gallery':
                 $id = intval($id);
                 $stmt = $db->prepare("DELETE FROM gallery_items WHERE id = ?");
@@ -370,8 +456,8 @@ function handleAdminActions() {
 
             case 'save_faq':
                 $id = intval($id);
-                $question = isset($_POST['question']) ? $_POST['question'] : '';
-                $answer = isset($_POST['answer']) ? $_POST['answer'] : '';
+                $question = $_POST['question'] ?? '';
+                $answer = $_POST['answer'] ?? '';
 
                 if ($id > 0) {
                     $stmt = $db->prepare("UPDATE faqs SET question = ?, answer = ? WHERE id = ?");
@@ -390,16 +476,15 @@ function handleAdminActions() {
 
             case 'save_about':
                 $id = intval($id);
-                $content = isset($_POST['content']) ? $_POST['content'] : '';
-                $title = isset($_POST['title']) ? $_POST['title'] : '';
+                $content = $_POST['content'] ?? '';
+                $title = $_POST['title'] ?? '';
 
                 $stmt = $db->prepare("UPDATE about_sections SET title = ?, content = ? WHERE id = ?");
                 $stmt->bind_param("ssi", $title, $content, $id);
                 return $stmt->execute();
 
-            // SITE AYARLARI DÜZELTMESİ - BAŞLANGIÇ
             case 'save_settings':
-                $settings = isset($_POST['settings']) ? $_POST['settings'] : [];
+                $settings = $_POST['settings'] ?? [];
 
                 if (!empty($settings) && is_array($settings)) {
                     $success = true;
@@ -416,13 +501,12 @@ function handleAdminActions() {
                     return $success;
                 }
                 return false;
-            // SITE AYARLARI DÜZELTMESİ - BİTİŞ
 
             case 'save_contact':
-                $name = isset($_POST['name']) ? $_POST['name'] : '';
-                $email = isset($_POST['email']) ? $_POST['email'] : '';
-                $subject = isset($_POST['subject']) ? $_POST['subject'] : '';
-                $message = isset($_POST['message']) ? $_POST['message'] : '';
+                $name = $_POST['name'] ?? '';
+                $email = $_POST['email'] ?? '';
+                $subject = $_POST['subject'] ?? '';
+                $message = $_POST['message'] ?? '';
 
                 $stmt = $db->prepare("INSERT INTO contacts (name, email, subject, message) VALUES (?, ?, ?, ?)");
                 $stmt->bind_param("ssss", $name, $email, $subject, $message);
@@ -439,10 +523,9 @@ function handleAdminActions() {
 }
 
 /* ===== ROUTING SYSTEM ===== */
-// PHP 5.x uyumluluğu için isset kontrolü
-$request = isset($_GET['page']) ? $_GET['page'] : 'home';
+$request = $_GET['page'] ?? 'home';
 $adminMode = isset($_GET['admin']);
-$action = isset($_GET['action']) ? $_GET['action'] : '';
+$action = $_GET['action'] ?? '';
 
 // POST işlemlerini yönet
 $actionResult = handleAdminActions();
@@ -478,7 +561,7 @@ if (isset($_GET['logout'])) {
             --dark: #121212;
             --darker: #0a0a0a;
             --dark-light: #1e1e1e;
-            --text: #ffffff; /* Tüm metinler beyaz */
+            --text: #ffffff;
             --text-muted: #adb5bd;
         }
 
@@ -491,7 +574,6 @@ if (isset($_GET['logout'])) {
             flex-direction: column;
         }
 
-        /* Tüm metinler beyaz */
         .navbar, .card, .card-header, .card-body, .list-group-item,
         .accordion-button, .table, .alert, .form-label, .text-muted,
         .footer-links a, .contact-form .form-control, .btn-outline-light,
@@ -500,7 +582,6 @@ if (isset($_GET['logout'])) {
             color: var(--text) !important;
         }
 
-        /* Text-muted için özel renk */
         .text-muted {
             color: var(--text-muted) !important;
         }
@@ -560,14 +641,14 @@ if (isset($_GET['logout'])) {
             box-shadow: 0 4px 8px rgba(0,0,0,0.3);
         }
 
-        .gallery-item img {
+        .gallery-item img, .gallery-item video {
             object-fit: cover;
             height: 100%;
             width: 100%;
             transition: transform 0.5s;
         }
 
-        .gallery-item:hover img {
+        .gallery-item:hover img, .gallery-item:hover video {
             transform: scale(1.1);
         }
 
@@ -778,7 +859,6 @@ if (isset($_GET['logout'])) {
             color: var(--text);
         }
 
-        /* Yeni Tema Geliştirmeleri */
         .hero-bg {
             background: linear-gradient(135deg, var(--dark) 0%, var(--darker) 100%);
             padding: 80px 0;
@@ -842,6 +922,24 @@ if (isset($_GET['logout'])) {
             bottom: 20px;
             right: 20px;
             z-index: 999;
+        }
+
+        .file-icon {
+            font-size: 4rem;
+            text-align: center;
+            color: var(--primary);
+        }
+
+        .pdf-preview {
+            width: 100%;
+            height: 300px;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            background: rgba(255,255,255,0.05);
         }
     </style>
 </head>
@@ -1285,7 +1383,7 @@ if (isset($_GET['logout'])) {
                     <?php elseif ($request === 'edit_about'): ?>
                         <!-- Hakkımda Düzenleme -->
                         <?php
-                        $section = isset($_GET['section']) ? $_GET['section'] : 'bio';
+                        $section = $_GET['section'] ?? 'bio';
                         $about = ['id' => 0, 'title' => 'Bölüm Başlığı', 'content' => 'Bölüm içeriği'];
 
                         if ($db_initialized) {
@@ -1463,7 +1561,20 @@ if (isset($_GET['logout'])) {
                                                     ?>
                                                     <div class="col-md-4 mb-4">
                                                         <div class="card h-100">
-                                                            <img src="<?= htmlspecialchars($item['image_path']) ?>" class="card-img-top" alt="<?= htmlspecialchars($item['title']) ?>" style="height: 200px; object-fit: cover;">
+                                                            <?php if ($item['file_type'] === 'video'): ?>
+                                                                <video class="card-img-top" style="height: 200px; object-fit: cover;" controls>
+                                                                    <source src="<?= htmlspecialchars($item['file_path']) ?>" type="video/mp4">
+                                                                    Tarayıcınız video etiketini desteklemiyor.
+                                                                </video>
+                                                            <?php elseif ($item['file_type'] === 'pdf'): ?>
+                                                                <div class="pdf-preview">
+                                                                    <i class="fas fa-file-pdf file-icon"></i>
+                                                                    <p class="mt-2">PDF Dosyası</p>
+                                                                    <a href="<?= htmlspecialchars($item['file_path']) ?>" target="_blank" class="btn btn-sm btn-primary mt-2">Görüntüle</a>
+                                                                </div>
+                                                            <?php else: ?>
+                                                                <img src="<?= htmlspecialchars($item['file_path']) ?>" class="card-img-top" alt="<?= htmlspecialchars($item['title']) ?>" style="height: 200px; object-fit: cover;">
+                                                            <?php endif; ?>
                                                             <div class="card-body">
                                                                 <h5 class="card-title"><?= htmlspecialchars($item['title']) ?></h5>
                                                                 <p class="card-text text-muted"><?= $item['category'] ?></p>
@@ -1502,7 +1613,7 @@ if (isset($_GET['logout'])) {
                         <!-- Galeri Ekleme/Düzenleme -->
                         <?php
                         $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-                        $item = ['id' => 0, 'title' => '', 'image_path' => '', 'category' => 'Fotoğraflar', 'description' => ''];
+                        $item = ['id' => 0, 'title' => '', 'file_path' => '', 'file_type' => 'image', 'category' => 'Fotoğraflar', 'description' => ''];
 
                         if ($id > 0 && $db_initialized) {
                             $db = getDB();
@@ -1528,7 +1639,7 @@ if (isset($_GET['logout'])) {
                                 <form method="POST" enctype="multipart/form-data">
                                     <input type="hidden" name="action" value="save_gallery">
                                     <input type="hidden" name="id" value="<?= $item['id'] ?>">
-                                    <input type="hidden" name="current_image" value="<?= $item['image_path'] ?>">
+                                    <input type="hidden" name="current_file" value="<?= $item['file_path'] ?>">
 
                                     <div class="mb-3">
                                         <label class="form-label">Başlık</label>
@@ -1550,13 +1661,26 @@ if (isset($_GET['logout'])) {
                                     </div>
 
                                     <div class="mb-3">
-                                        <label class="form-label">Resim</label>
-                                        <?php if ($item['image_path'] && file_exists($item['image_path'])): ?>
+                                        <label class="form-label">Dosya (Resim, Video veya PDF)</label>
+                                        <?php if ($item['file_path'] && file_exists($item['file_path'])): ?>
                                             <div class="mb-2">
-                                                <img src="<?= $item['image_path'] ?>" class="img-thumbnail" style="max-height: 200px;">
+                                                <?php if ($item['file_type'] === 'video'): ?>
+                                                    <video class="img-thumbnail" style="max-height: 200px;" controls>
+                                                        <source src="<?= $item['file_path'] ?>" type="video/mp4">
+                                                    </video>
+                                                <?php elseif ($item['file_type'] === 'pdf'): ?>
+                                                    <div class="pdf-preview">
+                                                        <i class="fas fa-file-pdf file-icon"></i>
+                                                        <p class="mt-2">Mevcut PDF Dosyası</p>
+                                                        <a href="<?= $item['file_path'] ?>" target="_blank" class="btn btn-sm btn-primary mt-2">Görüntüle</a>
+                                                    </div>
+                                                <?php else: ?>
+                                                    <img src="<?= $item['file_path'] ?>" class="img-thumbnail" style="max-height: 200px;">
+                                                <?php endif; ?>
                                             </div>
                                         <?php endif; ?>
-                                        <input type="file" name="image" class="form-control">
+                                        <input type="file" name="file" class="form-control">
+                                        <small class="text-muted">Desteklenen dosyalar: JPG, PNG, GIF, MP4, PDF (Max 200MB)</small>
                                     </div>
 
                                     <button type="submit" class="btn btn-success">
@@ -1796,7 +1920,7 @@ if (isset($_GET['logout'])) {
                         </div>
 
                     <?php elseif ($request === 'settings'): ?>
-                        <!-- SITE AYARLARI DÜZELTMESİ - BAŞLANGIÇ -->
+                        <!-- Site Ayarları -->
                         <div class="card">
                             <div class="card-header">
                                 <h5 class="mb-0">Site Ayarları</h5>
@@ -1865,8 +1989,6 @@ if (isset($_GET['logout'])) {
                                 </form>
                             </div>
                         </div>
-                        <!-- SITE AYARLARI DÜZELTMESİ - BİTİŞ -->
-
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
@@ -1897,8 +2019,17 @@ if (isset($_GET['logout'])) {
                             <li><a class="dropdown-item" href="?page=about_certificates">Sertifikalar</a></li>
                         </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link <?= $request === 'blog' ? 'active' : '' ?>" href="?page=blog">Blog</a>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle <?= $request === 'blog' ? 'active' : '' ?>" href="#" role="button" data-bs-toggle="dropdown">
+                            Blog
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark">
+                            <li><a class="dropdown-item" href="?page=blog">Tüm Yazılar</a></li>
+                            <li><a class="dropdown-item" href="?page=blog&category=Kişisel">Kişisel Yazılar</a></li>
+                            <li><a class="dropdown-item" href="?page=blog&category=Seyahat">Seyahat Notları</a></li>
+                            <li><a class="dropdown-item" href="?page=blog&category=Kitap-Film">Kitap & Film Önerileri</a></li>
+                            <li><a class="dropdown-item" href="?page=blog&category=Teknoloji">Teknoloji & İlgi Alanları</a></li>
+                        </ul>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link <?= $request === 'gallery' ? 'active' : '' ?>" href="?page=gallery">Galeri</a>
@@ -2234,12 +2365,24 @@ if (isset($_GET['logout'])) {
                     </div>
 
                     <div class="col-12">
-                        <?php if ($db_initialized): ?>
+                        <?php if ($db_initialized):
+                            $category = $_GET['category'] ?? '';
+                            $categoryTitle = $category ? htmlspecialchars($category) : 'Tüm Yazılar';
+                            ?>
+                            <div class="mb-4">
+                                <h4>Kategori: <?= $categoryTitle ?></h4>
+                            </div>
                             <div class="row">
                                 <?php
                                 $db = getDB();
                                 if ($db) {
-                                    $posts = $db->query("SELECT * FROM blog_posts ORDER BY created_at DESC");
+                                    $sql = "SELECT * FROM blog_posts";
+                                    if ($category) {
+                                        $sql .= " WHERE category = '".$db->real_escape_string($category)."'";
+                                    }
+                                    $sql .= " ORDER BY created_at DESC";
+
+                                    $posts = $db->query($sql);
                                     if ($posts && $posts->num_rows > 0) {
                                         while ($post = $posts->fetch_assoc()):
                                             ?>
@@ -2366,9 +2509,21 @@ if (isset($_GET['logout'])) {
                                     ?>
                                     <div class="col-md-4 mb-4">
                                         <div class="card">
-                                            <a href="<?= htmlspecialchars($item['image_path']) ?>" data-lightbox="gallery" data-title="<?= htmlspecialchars($item['title']) ?>">
-                                                <img src="<?= htmlspecialchars($item['image_path']) ?>" class="card-img-top" alt="<?= htmlspecialchars($item['title']) ?>" style="height: 250px; object-fit: cover;">
-                                            </a>
+                                            <?php if ($item['file_type'] === 'video'): ?>
+                                                <video class="card-img-top" style="height: 250px; object-fit: cover;" controls>
+                                                    <source src="<?= htmlspecialchars($item['file_path']) ?>" type="video/mp4">
+                                                </video>
+                                            <?php elseif ($item['file_type'] === 'pdf'): ?>
+                                                <div class="pdf-preview">
+                                                    <i class="fas fa-file-pdf file-icon"></i>
+                                                    <p class="mt-2">PDF Dosyası</p>
+                                                    <a href="<?= htmlspecialchars($item['file_path']) ?>" target="_blank" class="btn btn-sm btn-primary mt-2">Görüntüle</a>
+                                                </div>
+                                            <?php else: ?>
+                                                <a href="<?= htmlspecialchars($item['file_path']) ?>" data-lightbox="gallery" data-title="<?= htmlspecialchars($item['title']) ?>">
+                                                    <img src="<?= htmlspecialchars($item['file_path']) ?>" class="card-img-top" alt="<?= htmlspecialchars($item['title']) ?>" style="height: 250px; object-fit: cover;">
+                                                </a>
+                                            <?php endif; ?>
                                             <div class="card-body">
                                                 <h5 class="card-title"><?= htmlspecialchars($item['title']) ?></h5>
                                                 <p class="card-text"><?= htmlspecialchars($item['description']) ?></p>
