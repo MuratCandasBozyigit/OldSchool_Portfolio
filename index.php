@@ -1,10 +1,8 @@
 <?php
-// Hata raporlamayı aç
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-// Oturumu en başta başlat
 session_start();
 
 /* ===== DATABASE CONFIGURATION ===== */
@@ -20,19 +18,16 @@ define('SITE_TITLE', 'Murat Candaş Bozyiğit');
 date_default_timezone_set('Europe/Istanbul');
 
 /* ===== DATABASE INITIALIZATION ===== */
-/* ===== DATABASE INITIALIZATION ===== */
 function initializeDatabase() {
     $db_connected = true;
 
     try {
-        // Veritabanı bağlantısını dene
         $conn = @new mysqli(DB_HOST, DB_USER, DB_PASS);
 
         if ($conn->connect_error) {
             throw new Exception("Veritabanı sunucusuna bağlanılamadı");
         }
 
-        // Veritabanı oluştur (yoksa)
         if (!$conn->query("CREATE DATABASE IF NOT EXISTS ".DB_NAME." CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci")) {
             throw new Exception("Veritabanı oluşturulamadı");
         }
@@ -42,7 +37,6 @@ function initializeDatabase() {
             throw new Exception("Veritabanı seçilemedi");
         }
 
-        // Tabloları oluştur (yoksa)
         $tables = [
             "CREATE TABLE IF NOT EXISTS users (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -111,26 +105,22 @@ function initializeDatabase() {
             }
         }
 
-        // Eski image_path sütununu file_path olarak değiştir (eski versiyonlar için)
         $result = $conn->query("SHOW COLUMNS FROM gallery_items LIKE 'image_path'");
         if ($result && $result->num_rows > 0) {
             $conn->query("ALTER TABLE gallery_items CHANGE image_path file_path VARCHAR(255) NOT NULL");
         }
 
-        // Eğer file_type sütunu yoksa ekle (eski versiyonlar için)
         $result = $conn->query("SHOW COLUMNS FROM gallery_items LIKE 'file_type'");
         if (!$result || $result->num_rows === 0) {
             $conn->query("ALTER TABLE gallery_items ADD file_type ENUM('image', 'video', 'pdf') NOT NULL DEFAULT 'image' AFTER file_path");
         }
 
-        // Admin kullanıcı oluştur (yoksa)
         $adminCheck = $conn->query("SELECT id FROM users WHERE username = '".ADMIN_USER."'");
         if ($adminCheck && $adminCheck->num_rows === 0) {
             $hashedPass = password_hash(ADMIN_PASS, PASSWORD_DEFAULT);
             $conn->query("INSERT INTO users (username, password) VALUES ('".ADMIN_USER."', '$hashedPass')");
         }
 
-        // Temel sayfaları oluştur (yoksa)
         $pages = [
             ['slug' => 'home', 'title' => 'Ana Sayfa', 'content' => '<h1>Hoş Geldiniz!</h1><p>Kişisel web siteme hoş geldiniz.</p>'],
             ['slug' => 'about_bio', 'title' => 'Biyografi', 'content' => '<h2>Benim Hakkımda</h2><p>Buraya biyografi içeriğinizi ekleyin.</p>'],
@@ -152,7 +142,6 @@ function initializeDatabase() {
             }
         }
 
-        // Hakkımda bölümlerini oluştur (yoksa)
         $aboutSections = [
             ['section_type' => 'bio', 'title' => 'Biyografi', 'content' => '<p>Buraya biyografi içeriğinizi ekleyin.</p>'],
             ['section_type' => 'interests', 'title' => 'İlgi Alanlarım', 'content' => '<p>Buraya ilgi alanlarınızı ekleyin.</p>'],
@@ -169,7 +158,6 @@ function initializeDatabase() {
             }
         }
 
-        // Site ayarlarını oluştur (yoksa)
         $settings = [
             ['site_title', 'Murat Candaş Bozyiğit'],
             ['address', 'İstanbul, Türkiye'],
@@ -179,7 +167,8 @@ function initializeDatabase() {
             ['twitter', 'https://twitter.com/muratcandas'],
             ['instagram', 'https://instagram.com/muratcandas'],
             ['linkedin', 'https://linkedin.com/in/muratcandas'],
-            ['github', 'https://github.com/muratcandas']
+            ['github', 'https://github.com/muratcandas'],
+            ['theme', 'dark'] // Varsayılan tema
         ];
 
         foreach ($settings as $setting) {
@@ -195,13 +184,10 @@ function initializeDatabase() {
 
     } catch (Exception $e) {
         $db_connected = false;
-        // Hata mesajını görmek için (geliştirme aşamasında)
-        // echo "Hata: " . $e->getMessage();
     }
 
     return $db_connected;
 }
-// Veritabanı başlatmayı dene
 $db_initialized = @initializeDatabase();
 
 /* ===== CORE FUNCTIONS ===== */
@@ -267,6 +253,11 @@ function handleAdminActions() {
         $setting_key = $_POST['setting_key'] ?? '';
         $setting_value = $_POST['setting_value'] ?? '';
 
+        // SweetAlert için session mesajları
+        if (!isset($_SESSION['swal_messages'])) {
+            $_SESSION['swal_messages'] = [];
+        }
+
         switch ($action) {
             case 'login':
                 $username = $_POST['username'] ?? '';
@@ -281,9 +272,19 @@ function handleAdminActions() {
                     $user = $result->fetch_assoc();
                     if (password_verify($password, $user['password'])) {
                         $_SESSION['admin_logged_in'] = true;
+                        $_SESSION['swal_messages'][] = [
+                            'type' => 'success',
+                            'title' => 'Başarılı',
+                            'text' => 'Başarıyla giriş yaptınız'
+                        ];
                         return true;
                     }
                 }
+                $_SESSION['swal_messages'][] = [
+                    'type' => 'error',
+                    'title' => 'Hata',
+                    'text' => 'Geçersiz kullanıcı adı veya şifre'
+                ];
                 return false;
 
             case 'save_page':
@@ -293,7 +294,22 @@ function handleAdminActions() {
 
                 $stmt = $db->prepare("UPDATE pages SET title = ?, content = ? WHERE id = ?");
                 $stmt->bind_param("ssi", $title, $content, $id);
-                return $stmt->execute();
+                $result = $stmt->execute();
+
+                if ($result) {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'success',
+                        'title' => 'Başarılı',
+                        'text' => 'Sayfa başarıyla güncellendi'
+                    ];
+                } else {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'error',
+                        'title' => 'Hata',
+                        'text' => 'Sayfa güncellenirken hata oluştu'
+                    ];
+                }
+                return $result;
 
             case 'save_blog':
                 $id = intval($id);
@@ -308,13 +324,43 @@ function handleAdminActions() {
                     $stmt = $db->prepare("INSERT INTO blog_posts (title, content, category) VALUES (?, ?, ?)");
                     $stmt->bind_param("sss", $title, $content, $category);
                 }
-                return $stmt->execute();
+                $result = $stmt->execute();
+
+                if ($result) {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'success',
+                        'title' => 'Başarılı',
+                        'text' => $id > 0 ? 'Blog yazısı güncellendi' : 'Yeni blog yazısı eklendi'
+                    ];
+                } else {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'error',
+                        'title' => 'Hata',
+                        'text' => 'Blog yazısı kaydedilirken hata oluştu'
+                    ];
+                }
+                return $result;
 
             case 'delete_blog':
                 $id = intval($id);
                 $stmt = $db->prepare("DELETE FROM blog_posts WHERE id = ?");
                 $stmt->bind_param("i", $id);
-                return $stmt->execute();
+                $result = $stmt->execute();
+
+                if ($result) {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'success',
+                        'title' => 'Başarılı',
+                        'text' => 'Blog yazısı başarıyla silindi'
+                    ];
+                } else {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'error',
+                        'title' => 'Hata',
+                        'text' => 'Blog yazısı silinirken hata oluştu'
+                    ];
+                }
+                return $result;
 
             case 'save_gallery':
                 header('Content-Type: application/json');
@@ -372,7 +418,7 @@ function handleAdminActions() {
                         // Dosya boyutu kontrolü (max 200MB)
                         $maxFileSize = 200 * 1024 * 1024; // 200MB
                         if ($_FILES['file']['size'] > $maxFileSize) {
-                            throw new Exception("Dosya boyutu çok büyük! Maksimum 200MB yükleyebilirsiniz.");
+                            throw new Exception("Dosya boyutu çok büyük! Maksimum 5MB yükleyebilirsiniz.Php ini güncellersem 200...");
                         }
 
                         // MIME tipi kontrolü (sadece geçerli dosyalar için)
@@ -422,18 +468,18 @@ function handleAdminActions() {
                     if ($id > 0) {
                         // GÜNCELLEME
                         $stmt = $db->prepare("UPDATE gallery_items SET 
-                            title = ?,
-                            file_path = ?,
-                            file_type = ?,
-                            category = ?,
-                            description = ?
-                            WHERE id = ?");
+                        title = ?,
+                        file_path = ?,
+                        file_type = ?,
+                        category = ?,
+                        description = ?
+                        WHERE id = ?");
                         $stmt->bind_param("sssssi", $title, $file_path, $file_type, $category, $description, $id);
                     } else {
                         // EKLEME
                         $stmt = $db->prepare("INSERT INTO gallery_items 
-                            (title, file_path, file_type, category, description) 
-                            VALUES (?, ?, ?, ?, ?)");
+                        (title, file_path, file_type, category, description) 
+                        VALUES (?, ?, ?, ?, ?)");
                         $stmt->bind_param("sssss", $title, $file_path, $file_type, $category, $description);
                     }
 
@@ -459,14 +505,37 @@ function handleAdminActions() {
                     $response['message'] = "Hata: " . $e->getMessage();
                 }
 
-                echo json_encode($response);
+                // JSON çıktısı yerine session'a mesaj ekle
+                $_SESSION['swal_messages'][] = [
+                    'type' => $response['success'] ? 'success' : 'error',
+                    'title' => $response['success'] ? 'Başarılı' : 'Hata',
+                    'text' => $response['message']
+                ];
+
+                // Yönlendirme yap
+                header("Location: " . $_SERVER['HTTP_REFERER']);
                 exit;
 
             case 'delete_gallery':
                 $id = intval($id);
                 $stmt = $db->prepare("DELETE FROM gallery_items WHERE id = ?");
                 $stmt->bind_param("i", $id);
-                return $stmt->execute();
+                $result = $stmt->execute();
+
+                if ($result) {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'success',
+                        'title' => 'Başarılı',
+                        'text' => 'Galeri öğesi başarıyla silindi'
+                    ];
+                } else {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'error',
+                        'title' => 'Hata',
+                        'text' => 'Galeri öğesi silinirken hata oluştu'
+                    ];
+                }
+                return $result;
 
             case 'save_faq':
                 $id = intval($id);
@@ -480,13 +549,43 @@ function handleAdminActions() {
                     $stmt = $db->prepare("INSERT INTO faqs (question, answer) VALUES (?, ?)");
                     $stmt->bind_param("ss", $question, $answer);
                 }
-                return $stmt->execute();
+                $result = $stmt->execute();
+
+                if ($result) {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'success',
+                        'title' => 'Başarılı',
+                        'text' => $id > 0 ? 'SSS güncellendi' : 'Yeni SSS eklendi'
+                    ];
+                } else {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'error',
+                        'title' => 'Hata',
+                        'text' => 'SSS kaydedilirken hata oluştu'
+                    ];
+                }
+                return $result;
 
             case 'delete_faq':
                 $id = intval($id);
                 $stmt = $db->prepare("DELETE FROM faqs WHERE id = ?");
                 $stmt->bind_param("i", $id);
-                return $stmt->execute();
+                $result = $stmt->execute();
+
+                if ($result) {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'success',
+                        'title' => 'Başarılı',
+                        'text' => 'SSS başarıyla silindi'
+                    ];
+                } else {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'error',
+                        'title' => 'Hata',
+                        'text' => 'SSS silinirken hata oluştu'
+                    ];
+                }
+                return $result;
 
             case 'save_about':
                 $id = intval($id);
@@ -495,7 +594,22 @@ function handleAdminActions() {
 
                 $stmt = $db->prepare("UPDATE about_sections SET title = ?, content = ? WHERE id = ?");
                 $stmt->bind_param("ssi", $title, $content, $id);
-                return $stmt->execute();
+                $result = $stmt->execute();
+
+                if ($result) {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'success',
+                        'title' => 'Başarılı',
+                        'text' => 'Hakkımda bölümü güncellendi'
+                    ];
+                } else {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'error',
+                        'title' => 'Hata',
+                        'text' => 'Hakkımda bölümü güncellenirken hata oluştu'
+                    ];
+                }
+                return $result;
 
             case 'save_settings':
                 $settings = $_POST['settings'] ?? [];
@@ -505,12 +619,26 @@ function handleAdminActions() {
 
                     foreach ($settings as $key => $value) {
                         $stmt = $db->prepare("INSERT INTO site_settings (setting_key, setting_value) 
-                                              VALUES (?, ?) 
-                                              ON DUPLICATE KEY UPDATE setting_value = ?");
+                                          VALUES (?, ?) 
+                                          ON DUPLICATE KEY UPDATE setting_value = ?");
                         $stmt->bind_param("sss", $key, $value, $value);
                         if (!$stmt->execute()) {
                             $success = false;
                         }
+                    }
+
+                    if ($success) {
+                        $_SESSION['swal_messages'][] = [
+                            'type' => 'success',
+                            'title' => 'Başarılı',
+                            'text' => 'Site ayarları başarıyla güncellendi'
+                        ];
+                    } else {
+                        $_SESSION['swal_messages'][] = [
+                            'type' => 'error',
+                            'title' => 'Hata',
+                            'text' => 'Bazı ayarlar güncellenemedi'
+                        ];
                     }
                     return $success;
                 }
@@ -524,13 +652,43 @@ function handleAdminActions() {
 
                 $stmt = $db->prepare("INSERT INTO contacts (name, email, subject, message) VALUES (?, ?, ?, ?)");
                 $stmt->bind_param("ssss", $name, $email, $subject, $message);
-                return $stmt->execute();
+                $result = $stmt->execute();
+
+                if ($result) {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'success',
+                        'title' => 'Başarılı',
+                        'text' => 'Mesajınız başarıyla gönderildi'
+                    ];
+                } else {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'error',
+                        'title' => 'Hata',
+                        'text' => 'Mesaj gönderilirken hata oluştu'
+                    ];
+                }
+                return $result;
 
             case 'delete_contact':
                 $id = intval($id);
                 $stmt = $db->prepare("DELETE FROM contacts WHERE id = ?");
                 $stmt->bind_param("i", $id);
-                return $stmt->execute();
+                $result = $stmt->execute();
+
+                if ($result) {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'success',
+                        'title' => 'Başarılı',
+                        'text' => 'Mesaj başarıyla silindi'
+                    ];
+                } else {
+                    $_SESSION['swal_messages'][] = [
+                        'type' => 'error',
+                        'title' => 'Hata',
+                        'text' => 'Mesaj silinirken hata oluştu'
+                    ];
+                }
+                return $result;
         }
     }
     return false;
@@ -552,10 +710,34 @@ if (isset($_GET['logout'])) {
     exit;
 }
 
+// Tema değiştirme
+if (isset($_GET['theme'])) {
+    $theme = $_GET['theme'];
+    if (in_array($theme, ['dark', 'light'])) {
+        // Tema tercihini veritabanına kaydet
+        $db = getDB();
+        if ($db) {
+            $stmt = $db->prepare("INSERT INTO site_settings (setting_key, setting_value) 
+                                  VALUES ('theme', ?) 
+                                  ON DUPLICATE KEY UPDATE setting_value = ?");
+            $stmt->bind_param("ss", $theme, $theme);
+            $stmt->execute();
+        }
+
+        // Geçerli sayfaya yönlendir (theme parametresini kaldırarak)
+        $url = str_replace(['&theme=dark', '&theme=light'], '', $_SERVER['REQUEST_URI']);
+        header("Location: $url");
+        exit;
+    }
+}
+
+// Geçerli tema
+$currentTheme = getSetting('theme', 'dark');
+
 /* ===== HTML OUTPUT ===== */
 ?>
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="tr" data-theme="<?= $currentTheme ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -564,19 +746,91 @@ if (isset($_GET['logout'])) {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/css/lightbox.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
-            --primary: #4e73df;
-            --secondary: #6c757d;
-            --success: #1cc88a;
-            --info: #36b9cc;
-            --warning: #f6c23e;
-            --danger: #e74a3b;
-            --dark: #121212;
-            --darker: #0a0a0a;
-            --dark-light: #1e1e1e;
-            --text: #ffffff;
-            --text-muted: #adb5bd;
+            /* Dark Theme Variables */
+            --primary-dark: #4e73df;
+            --secondary-dark: #6c757d;
+            --success-dark: #1cc88a;
+            --info-dark: #36b9cc;
+            --warning-dark: #f6c23e;
+            --danger-dark: #e74a3b;
+            --dark-dark: #121212;
+            --darker-dark: #0a0a0a;
+            --dark-light-dark: #1e1e1e;
+            --text-dark: #ffffff;
+            --text-muted-dark: #adb5bd;
+
+            /* Light Theme Variables */
+            --primary-light: #4e73df;
+            --secondary-light: #6c757d;
+            --success-light: #1cc88a;
+            --info-light: #36b9cc;
+            --warning-light: #f6c23e;
+            --danger-light: #e74a3b;
+            --dark-light: #f8f9fa;
+            --darker-light: #e9ecef;
+            --dark-light-light: #ffffff;
+            --text-light: #212529; /* Siyah metin */
+            --text-muted-light: #6c757d; /* Gri metin */
+        }
+
+        /* Dark Theme */
+        [data-theme="dark"] {
+            --primary: var(--primary-dark);
+            --secondary: var(--secondary-dark);
+            --success: var(--success-dark);
+            --info: var(--info-dark);
+            --warning: var(--warning-dark);
+            --danger: var(--danger-dark);
+            --dark: var(--dark-dark);
+            --darker: var(--darker-dark);
+            --dark-light: var(--dark-light-dark);
+            --text: var(--text-dark);
+            --text-muted: var(--text-muted-dark);
+        }
+
+        /* Light Theme */
+        [data-theme="light"] {
+            --primary: var(--primary-light);
+            --secondary: var(--secondary-light);
+            --success: var(--success-light);
+            --info: var(--info-light);
+            --warning: var(--warning-light);
+            --danger: var(--danger-light);
+            --dark: var(--dark-light);
+            --darker: var(--darker-light);
+            --dark-light: var(--dark-light-light);
+            --text: var(--text-light); /* Siyah metin */
+            --text-muted: var(--text-muted-light); /* Gri metin */
+
+            /* Özel ayarlar */
+            .navbar, .card, .card-header, .card-body, .list-group-item,
+            .accordion-button, .table, .alert, .form-label, .text-muted,
+            .footer-links a, .contact-form .form-control, .btn-outline-light,
+            .social-link, .stat-card, .admin-editable, .gallery-item, .blog-card,
+            .empty-state, .section-header, .feature-icon, .btn-gradient, .admin-badge {
+                color: var(--text) !important;
+            }
+
+            .card {
+                border: 1px solid rgba(0,0,0,0.1) !important;
+            }
+
+            .table {
+                color: var(--text) !important;
+            }
+
+            .contact-form .form-control {
+                background: #fff !important;
+                color: #000 !important;
+                border: 1px solid #dee2e6 !important;
+            }
+
+            .empty-state {
+                background-color: #f8f9fa !important;
+            }
         }
 
         body {
@@ -586,6 +840,7 @@ if (isset($_GET['logout'])) {
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            transition: background-color 0.3s, color 0.3s;
         }
 
         .navbar, .card, .card-header, .card-body, .list-group-item,
@@ -594,6 +849,7 @@ if (isset($_GET['logout'])) {
         .social-link, .stat-card, .admin-editable, .gallery-item, .blog-card,
         .empty-state, .section-header, .feature-icon, .btn-gradient, .admin-badge {
             color: var(--text) !important;
+            transition: background-color 0.3s, color 0.3s, border-color 0.3s;
         }
 
         .text-muted {
@@ -955,9 +1211,49 @@ if (isset($_GET['logout'])) {
             flex-direction: column;
             background: rgba(255,255,255,0.05);
         }
+
+        .theme-switcher {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: all 0.3s;
+        }
+
+        .theme-switcher:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+        }
     </style>
 </head>
 <body class="<?= $adminMode ? 'admin-panel' : '' ?>">
+<?php
+// SweetAlert mesajlarını göster
+if (!empty($_SESSION['swal_messages'])) {
+    foreach ($_SESSION['swal_messages'] as $message) {
+        echo "<script>
+            Swal.fire({
+                icon: '{$message['type']}',
+                title: '{$message['title']}',
+                text: '{$message['text']}',
+                confirmButtonColor: '#4e73df'
+            });
+        </script>";
+    }
+    $_SESSION['swal_messages'] = [];
+}
+?>
+
 <?php if ($adminMode): ?>
     <!-- ADMIN PANEL LAYOUT -->
     <div class="d-flex">
@@ -970,11 +1266,11 @@ if (isset($_GET['logout'])) {
                         <i class="fas fa-tachometer-alt me-2"></i> Gösterge Paneli
                     </a>
                 </li>
-                <li class="nav-item mb-2">
-                    <a href="?admin&page=pages" class="nav-link text-white <?= $request === 'pages' ? 'active' : '' ?>">
-                        <i class="fas fa-file-alt me-2"></i> Sayfalar
-                    </a>
-                </li>
+<!--                <li class="nav-item mb-2">-->
+<!--                    <a href="?admin&page=pages" class="nav-link text-white --><?php //= $request === 'pages' ? 'active' : '' ?><!--">-->
+<!--                        <i class="fas fa-file-alt me-2"></i> Sayfalar-->
+<!--                    </a>-->
+<!--                </li>-->
                 <li class="nav-item mb-2">
                     <a href="?admin&page=about" class="nav-link text-white <?= $request === 'about' ? 'active' : '' ?>">
                         <i class="fas fa-user me-2"></i> Hakkımda
@@ -1057,13 +1353,6 @@ if (isset($_GET['logout'])) {
                 </nav>
 
                 <div class="container-fluid py-4">
-                    <?php if ($actionResult): ?>
-                        <div class="alert alert-success alert-dismissible fade show" role="alert">
-                            <i class="fas fa-check-circle me-2"></i> İşlem başarıyla tamamlandı!
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    <?php endif; ?>
-
                     <?php if (!$db_initialized): ?>
                         <div class="alert alert-danger">
                             <h4 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i> Veritabanı Hatası!</h4>
@@ -1578,7 +1867,6 @@ if (isset($_GET['logout'])) {
                                                             <?php if ($item['file_type'] === 'video'): ?>
                                                                 <video class="card-img-top" style="height: 200px; object-fit: cover;" controls>
                                                                     <source src="<?= htmlspecialchars($item['file_path']) ?>" type="video/mp4">
-                                                                    Tarayıcınız video etiketini desteklemiyor.
                                                                 </video>
                                                             <?php elseif ($item['file_type'] === 'pdf'): ?>
                                                                 <div class="pdf-preview">
@@ -1591,7 +1879,7 @@ if (isset($_GET['logout'])) {
                                                             <?php endif; ?>
                                                             <div class="card-body">
                                                                 <h5 class="card-title"><?= htmlspecialchars($item['title']) ?></h5>
-                                                                <p class="card-text text-muted"><?= $item['category'] ?></p>
+                                                                <p class="card-text"><?= htmlspecialchars($item['description']) ?></p>
                                                                 <div class="d-flex justify-content-between">
                                                                     <a href="?admin&page=edit_gallery&id=<?= $item['id'] ?>" class="btn btn-sm btn-primary me-2">
                                                                         <i class="fas fa-edit me-1"></i> Düzenle
@@ -1650,7 +1938,7 @@ if (isset($_GET['logout'])) {
                                 </a>
                             </div>
                             <div class="card-body">
-                                <form method="POST" enctype="multipart/form-data">
+                                <form method="POST" enctype="multipart/form-data" id="galleryForm">
                                     <input type="hidden" name="action" value="save_gallery">
                                     <input type="hidden" name="id" value="<?= $item['id'] ?>">
                                     <input type="hidden" name="current_file" value="<?= $item['file_path'] ?>">
@@ -1694,7 +1982,7 @@ if (isset($_GET['logout'])) {
                                             </div>
                                         <?php endif; ?>
                                         <input type="file" name="file" class="form-control">
-                                        <small class="text-muted">Desteklenen dosyalar: JPG, PNG, GIF, MP4, PDF (Max 200MB)</small>
+                                        <small class="text-muted">Desteklenen dosyalar: JPG, JPEG, PNG, GIF, WEBP, MP4, MOV, AVI, PDF (Max 200MB)</small>
                                     </div>
 
                                     <button type="submit" class="btn btn-success">
@@ -1997,6 +2285,14 @@ if (isset($_GET['logout'])) {
                                                value="<?= htmlspecialchars(getSetting('github', 'https://github.com/muratcandas')) ?>">
                                     </div>
 
+                                    <div class="mb-3">
+                                        <label class="form-label">Tema</label>
+                                        <select name="settings[theme]" class="form-select">
+                                            <option value="dark" <?= getSetting('theme') === 'dark' ? 'selected' : '' ?>>Koyu Tema</option>
+                                            <option value="light" <?= getSetting('theme') === 'light' ? 'selected' : '' ?>>Açık Tema</option>
+                                        </select>
+                                    </div>
+
                                     <button type="submit" class="btn btn-success">
                                         <i class="fas fa-save me-2"></i> Ayarları Kaydet
                                     </button>
@@ -2055,7 +2351,7 @@ if (isset($_GET['logout'])) {
                         <a class="nav-link <?= $request === 'contact' ? 'active' : '' ?>" href="?page=contact">İletişim</a>
                     </li>
                 </ul>
-                <a href="?admin" class="btn btn-outline-light">
+                <a href="?admin" class="btn btn-outline-light me-2">
                     <i class="fas fa-lock me-2"></i>Yönetim
                 </a>
             </div>
@@ -2522,7 +2818,7 @@ if (isset($_GET['logout'])) {
                                 while ($item = $galleryItems->fetch_assoc()):
                                     ?>
                                     <div class="col-md-4 mb-4">
-                                        <div class="card">
+                                        <div class="card h-100">
                                             <?php if ($item['file_type'] === 'video'): ?>
                                                 <video class="card-img-top" style="height: 250px; object-fit: cover;" controls>
                                                     <source src="<?= htmlspecialchars($item['file_path']) ?>" type="video/mp4">
@@ -2551,7 +2847,7 @@ if (isset($_GET['logout'])) {
                                         <div class="card">
                                             <div class="card-body text-center py-5">
                                                 <i class="fas fa-images fa-3x text-muted mb-3"></i>
-                                                <h3>Galeri Boş</h3>
+                                                <h4>Galeri Boş</h4>
                                                 <p class="text-muted">Henüz galeriye öğe eklenmemiş</p>
                                             </div>
                                         </div>
@@ -2822,6 +3118,11 @@ if (isset($_GET['logout'])) {
             </div>
         </div>
     </footer>
+
+    <!-- Tema değiştirici -->
+    <div class="theme-switcher" onclick="toggleTheme()">
+        <i class="fas fa-<?= $currentTheme === 'dark' ? 'sun' : 'moon' ?>"></i>
+    </div>
 <?php endif; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -2832,6 +3133,81 @@ if (isset($_GET['logout'])) {
         'resizeDuration': 200,
         'wrapAround': true,
         'showImageNumberLabel': true
+    });
+
+    // Tema değiştirme
+    function toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', newTheme);
+        window.location.href = '?theme=' + newTheme;
+    }
+
+    // Galeri formu AJAX ile gönderim
+    const galleryForm = document.getElementById('galleryForm');
+    if (galleryForm) {
+        galleryForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(this);
+
+            fetch('', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Başarılı!',
+                            text: data.message
+                        }).then(() => {
+                            window.location.reload();
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Hata!',
+                            text: data.message
+                        });
+                    }
+                })
+                .catch(error => {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Hata!',
+                        text: 'Bir hata oluştu: ' + error
+                    });
+                });
+        });
+    }
+
+    // Genel hata mesajları için SweetAlert
+    document.querySelectorAll('form').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            const requiredFields = this.querySelectorAll('[required]');
+            let valid = true;
+
+            requiredFields.forEach(field => {
+                if (!field.value.trim()) {
+                    valid = false;
+                    field.style.borderColor = 'red';
+                } else {
+                    field.style.borderColor = '';
+                }
+            });
+
+            if (!valid) {
+                e.preventDefault();
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Hata!',
+                    text: 'Lütfen tüm zorunlu alanları doldurun.',
+                    confirmButtonColor: '#4e73df'
+                });
+            }
+        });
     });
 </script>
 </body>
