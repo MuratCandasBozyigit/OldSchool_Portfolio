@@ -2442,13 +2442,14 @@ if (!empty($_SESSION['swal_messages'])) {
                             <div class="card feature-card h-100">
                                 <div class="card-body p-4">
                                     <div class="feature-icon mx-auto">
-                                        <i class="fas fa-mobile-alt"></i>
+                                        <i class="fas fa-laptop-code"></i>
                                     </div>
-                                    <h5 class="card-title">Mobil Uygulamalar</h5>
-                                    <p class="card-text">iOS ve Android için performans odaklı ve kullanıcı deneyimi üst düzeyde mobil uygulamalar tasarlıyorum.</p>
+                                    <h5 class="card-title">Çok Platformlu Uygulamalar</h5>
+                                    <p class="card-text">Windows, macOS, Linux ve mobil platformlar için performans odaklı, stabil ve kullanıcı dostu uygulamalar geliştiriyorum.</p>
                                 </div>
                             </div>
                         </div>
+
                         <div class="col-md-4 mb-4">
                             <div class="card feature-card h-100">
                                 <div class="card-body p-4">
