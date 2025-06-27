@@ -380,7 +380,6 @@ function handleAdminActions() {
                 return $result;
 
             case 'save_gallery':
-                header('Content-Type: application/json');
                 $response = ['success' => false, 'message' => ''];
 
                 try {
@@ -2351,8 +2350,16 @@ if (!empty($_SESSION['swal_messages'])) {
                             <li><a class="dropdown-item" href="?page=blog&category=Teknoloji">Teknoloji & İlgi Alanları</a></li>
                         </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link <?= $request === 'gallery' ? 'active' : '' ?>" href="?page=gallery">Galeri</a>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle <?= strpos($request, 'gallery') === 0 ? 'active' : '' ?>" href="#" role="button" data-bs-toggle="dropdown">
+                            Galeri
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark">
+                            <li><a class="dropdown-item" href="?page=gallery">Tümü</a></li>
+                            <li><a class="dropdown-item" href="?page=gallery&category=Fotoğraflar">Fotoğraflarım</a></li>
+                            <li><a class="dropdown-item" href="?page=gallery&category=Hobiler">Hobilerimle İlgili Görseller</a></li>
+                            <li><a class="dropdown-item" href="?page=gallery&category=Videolar">Video & Multimedya</a></li>
+                        </ul>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link <?= $request === 'faq' ? 'active' : '' ?>" href="?page=faq">SSS</a>
@@ -2361,9 +2368,9 @@ if (!empty($_SESSION['swal_messages'])) {
                         <a class="nav-link <?= $request === 'contact' ? 'active' : '' ?>" href="?page=contact">İletişim</a>
                     </li>
                 </ul>
-                <a href="?admin" class="btn btn-outline-light me-2">
-                    <i class="fas fa-lock me-2"></i>Yönetim
-                </a>
+<!--                <a href="?admin" class="btn btn-outline-light me-2">-->
+<!--                    <i class="fas fa-lock me-2"></i>Yönetim-->
+<!--                </a>-->
             </div>
         </div>
     </nav>
@@ -2393,15 +2400,11 @@ if (!empty($_SESSION['swal_messages'])) {
 
                         <div class="col-lg-6 text-center">
                             <div class="position-relative">
-                                <img src="
-                                https://plus.unsplash.com/premium_photo-1673688152102-b24caa6e8725?q=80&w=3432&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+                                <img src="https://plus.unsplash.com/premium_photo-1673688152102-b24caa6e8725?q=80&w=3432&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
                                      class="img-fluid rounded-circle shadow-lg profile-img" alt="Profil Resmi">
                                 <span class="admin-badge"><?= date('Y') ?></span>
                             </div>
                         </div>
-
-
-
                     </div>
                 </div>
             </section>
@@ -2828,7 +2831,20 @@ if (!empty($_SESSION['swal_messages'])) {
                     <div class="col-12 mb-4">
                         <div class="card">
                             <div class="card-header">
-                                <h2 class="mb-0">Galeri</h2>
+                                <?php
+                                $category = $_GET['category'] ?? '';
+                                $categoryTitle = 'Galeri';
+
+                                if ($category) {
+                                    $categoryTitle = match($category) {
+                                        'Fotoğraflar' => 'Fotoğraflarım',
+                                        'Hobiler' => 'Hobilerimle İlgili Görseller',
+                                        'Videolar' => 'Video & Multimedya İçerikleri',
+                                        default => $category
+                                    };
+                                }
+                                ?>
+                                <h2 class="mb-0"><?= $categoryTitle ?></h2>
                             </div>
                         </div>
                     </div>
@@ -2837,7 +2853,12 @@ if (!empty($_SESSION['swal_messages'])) {
                         <?php
                         $db = getDB();
                         if ($db) {
-                            $galleryItems = $db->query("SELECT * FROM gallery_items ORDER BY id DESC");
+                            $sql = "SELECT * FROM gallery_items";
+                            if ($category) {
+                                $sql .= " WHERE category = '" . $db->real_escape_string($category) . "'";
+                            }
+                            $galleryItems = $db->query($sql);
+
                             if ($galleryItems && $galleryItems->num_rows > 0) {
                                 echo '<div class="row">';
                                 while ($item = $galleryItems->fetch_assoc()):
@@ -3137,75 +3158,20 @@ if (!empty($_SESSION['swal_messages'])) {
                 <div class="col-md-6">
                     <p class="mb-0 text-muted">&copy; <?= date('Y') ?> <?= getSetting('site_title', SITE_TITLE) ?>. Tüm hakları saklıdır.</p>
                 </div>
-
             </div>
         </div>
     </footer>
-
-    <!-- Tema değiştirici -->
-    <!--    <div class="theme-switcher" onclick="toggleTheme()">-->
-    <!--        <i class="fas fa---><?php //= $currentTheme === 'dark' ? 'sun' : 'moon' ?><!--"></i>-->
-    <!--    </div>-->
 <?php endif; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/js/lightbox.min.js"></script>
 <script>
     // Lightbox ayarları
-    //lightbox.option({
-    //'resizeDuration': 200,
-    //  'wrapAround': true,
-    //  'showImageNumberLabel': true
-    //});
-
-    // Tema değiştirme
-    //function toggleTheme() {
-    //const currentTheme = document.documentElement.getAttribute('data-theme');
-    //  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    //    document.documentElement.setAttribute('data-theme', newTheme);
-    //      window.location.href = '?theme=' + newTheme;
-    //}
-
-
-    // Galeri formu AJAX ile gönderim
-    const galleryForm = document.getElementById('galleryForm');
-    if (galleryForm) {
-        galleryForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-
-            const formData = new FormData(this);
-
-            fetch('', {
-                method: 'POST',
-                body: formData
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Başarılı!',
-                            text: data.message
-                        }).then(() => {
-                            window.location.reload();
-                        });
-                    } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Hata!',
-                            text: data.message
-                        });
-                    }
-                })
-                .catch(error => {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Hata!',
-                        text: 'Bir hata oluştu: ' + error
-                    });
-                });
-        });
-    }
+    lightbox.option({
+        'resizeDuration': 200,
+        'wrapAround': true,
+        'showImageNumberLabel': true
+    });
 
     // Genel hata mesajları için SweetAlert
     document.querySelectorAll('form').forEach(form => {
