@@ -9,17 +9,12 @@ session_start();
 
 /* ===== DATABASE CONFIGURATION ===== */
 
-//define('DB_HOST', '217.195.207.215');
-define('DB_HOST', 'localhost');
+define('DB_HOST', '217.195.207.215');
+//define('DB_HOST', 'localhost');
 define('DB_PORT', '3306');
 define('DB_USER', 'murat');
 define('DB_PASS', '81644936.Ma');
 define('DB_NAME', 'dunyani1_mcb');
-
-//define('DB_HOST', 'localhost');
-//define('DB_USER', 'root');
-//define('DB_PASS', '');
-//define('DB_NAME', 'web_projesi_db');
 
 /* ===== SITE CONFIGURATION ===== */
 define('ADMIN_USER', 'admin');
@@ -1288,11 +1283,11 @@ if (!empty($_SESSION['swal_messages'])) {
                         <i class="fas fa-tachometer-alt me-2"></i> Gösterge Paneli
                     </a>
                 </li>
-                <li class="nav-item mb-2">
-                    <a href="?admin&page=pages" class="nav-link text-white <?= $request === 'pages' ? 'active' : '' ?>">
-                        <i class="fas fa-file-alt me-2"></i> Sayfalar
-                    </a>
-                </li>
+                <!--                <li class="nav-item mb-2">-->
+                <!--                    <a href="?admin&page=pages" class="nav-link text-white --><?php //= $request === 'pages' ? 'active' : '' ?><!--">-->
+                <!--                        <i class="fas fa-file-alt me-2"></i> Sayfalar-->
+                <!--                    </a>-->
+                <!--                </li>-->
                 <li class="nav-item mb-2">
                     <a href="?admin&page=about" class="nav-link text-white <?= $request === 'about' ? 'active' : '' ?>">
                         <i class="fas fa-user me-2"></i> Hakkımda
@@ -2307,13 +2302,6 @@ if (!empty($_SESSION['swal_messages'])) {
                                                value="<?= htmlspecialchars(getSetting('github', 'https://github.com/muratcandas')) ?>">
                                     </div>
 
-<!--                                    <div class="mb-3">-->
-<!--                                        <label class="form-label">Tema</label>-->
-<!--                                        <select name="settings[theme]" class="form-select">-->
-<!--                                            <option value="dark" --><?php //= getSetting('theme') === 'dark' ? 'selected' : '' ?><!-->Koyu Tema</option>-->
-<!--                                            <option value="light" --><?php //= getSetting('theme') === 'light' ? 'selected' : '' ?><!-->Açık Tema</option>-->
-<!--                                        </select>-->
-<!--                                    </div>-->
 
                                     <button type="submit" class="btn btn-success">
                                         <i class="fas fa-save me-2"></i> Ayarları Kaydet
@@ -3155,9 +3143,9 @@ if (!empty($_SESSION['swal_messages'])) {
     </footer>
 
     <!-- Tema değiştirici -->
-<!--    <div class="theme-switcher" onclick="toggleTheme()">-->
-<!--        <i class="fas fa---><?php //= $currentTheme === 'dark' ? 'sun' : 'moon' ?><!--"></i>-->
-<!--    </div>-->
+    <!--    <div class="theme-switcher" onclick="toggleTheme()">-->
+    <!--        <i class="fas fa---><?php //= $currentTheme === 'dark' ? 'sun' : 'moon' ?><!--"></i>-->
+    <!--    </div>-->
 <?php endif; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
