@@ -20,6 +20,7 @@ define('SITE_TITLE', 'Murat Candaş Bozyiğit');
 date_default_timezone_set('Europe/Istanbul');
 
 /* ===== DATABASE INITIALIZATION ===== */
+/* ===== DATABASE INITIALIZATION ===== */
 function initializeDatabase() {
     $db_connected = true;
 
@@ -69,7 +70,7 @@ function initializeDatabase() {
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 title VARCHAR(255) NOT NULL,
                 file_path VARCHAR(255) NOT NULL,
-                file_type ENUM('image', 'video', 'pdf') NOT NULL,
+                file_type ENUM('image', 'video', 'pdf') NOT NULL DEFAULT 'image',
                 category ENUM('Fotoğraflar', 'Hobiler', 'Videolar') NOT NULL,
                 description TEXT
             )",
@@ -108,6 +109,18 @@ function initializeDatabase() {
             if (!$conn->query($sql)) {
                 throw new Exception("Tablo oluşturulamadı: " . $conn->error);
             }
+        }
+
+        // Eski image_path sütununu file_path olarak değiştir (eski versiyonlar için)
+        $result = $conn->query("SHOW COLUMNS FROM gallery_items LIKE 'image_path'");
+        if ($result && $result->num_rows > 0) {
+            $conn->query("ALTER TABLE gallery_items CHANGE image_path file_path VARCHAR(255) NOT NULL");
+        }
+
+        // Eğer file_type sütunu yoksa ekle (eski versiyonlar için)
+        $result = $conn->query("SHOW COLUMNS FROM gallery_items LIKE 'file_type'");
+        if (!$result || $result->num_rows === 0) {
+            $conn->query("ALTER TABLE gallery_items ADD file_type ENUM('image', 'video', 'pdf') NOT NULL DEFAULT 'image' AFTER file_path");
         }
 
         // Admin kullanıcı oluştur (yoksa)
@@ -182,11 +195,12 @@ function initializeDatabase() {
 
     } catch (Exception $e) {
         $db_connected = false;
+        // Hata mesajını görmek için (geliştirme aşamasında)
+        // echo "Hata: " . $e->getMessage();
     }
 
     return $db_connected;
 }
-
 // Veritabanı başlatmayı dene
 $db_initialized = @initializeDatabase();
 
